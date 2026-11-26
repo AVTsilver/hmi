@@ -1,5 +1,5 @@
 /* offline cache — HMI fault log app */
-const V='hmi-v3';
+const V='hmi-v4';
 const FONTS=["app/fonts/ibm-plex-sans-arabic-arabic-400-normal.woff2", "app/fonts/ibm-plex-sans-arabic-arabic-500-normal.woff2", "app/fonts/ibm-plex-sans-arabic-arabic-600-normal.woff2", "app/fonts/ibm-plex-sans-arabic-arabic-700-normal.woff2", "app/fonts/ibm-plex-sans-arabic-latin-400-normal.woff2", "app/fonts/ibm-plex-sans-arabic-latin-500-normal.woff2", "app/fonts/ibm-plex-sans-arabic-latin-600-normal.woff2", "app/fonts/ibm-plex-sans-arabic-latin-700-normal.woff2"];
 const ENGINE=["pp/det.b64.txt", "pp/keys.txt", "pp/ort-wasm-simd-threaded.mjs", "pp/ort-wasm-simd-threaded.wasm", "pp/ort.wasm.min.js", "pp/rec.b64.txt", "ocr/eng.b64.txt", "ocr/tesseract-core-lstm.wasm.js", "ocr/tesseract-core-simd-lstm.wasm.js", "ocr/tesseract.min.js", "ocr/worker.min.js"];
 const CORE=['./','index.html','manifest.json','app/shim.js','app/fonts.css','lib/html2canvas.min.js','lib/jspdf.umd.min.js','icons/icon-192.png','icons/icon-512.png',...FONTS];
