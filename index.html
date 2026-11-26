@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>سجل أعطال HMI</title>
+<link rel="stylesheet" href="app/fonts.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111417">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="author" content="م. محمد علي محمد صبيح">
+<style>
+/* VOICE: control room logbook — clinical, exact, calm
+   IDEA: the shift fault log sheet an operator fills beside the Mark VI HMI
+   PICTURE: the working tool itself — capture panel, then readings table with alarm chips
+   COLOUR and TYPE: steel panel, black ink, white, alarm red / amber; IBM Plex Sans Arabic
+   LAYOUT: tabs; one calm column on phone, two columns on wide screens; A4 sheets in report */
+:root{color-scheme:light dark;--bg:light-dark(#d5dbe0,#16191c);--panel:light-dark(#fff,#20252a);--ink:light-dark(#0d0f11,#eef1f3);--mute:light-dark(#56606a,#9aa5ae);--line:light-dark(#b9c2c9,#343b42);--red:#e8251a;--amb:#d98b00;--ok:#2f7d4a;--blue:light-dark(#0b4f8a,#6fb0ea)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "IBM Plex Sans Arabic",Tahoma,sans-serif;overflow-x:clip}
+header{background:#0d0f11;color:#fff;padding:14px max(4vw,14px) 0}
+h1{font-size:clamp(22px,4vw,32px);line-height:1.1;margin:0 0 4px;font-weight:700}
+.sub{color:#aab4bc;font-size:14px;margin:0 0 12px}.sig1{color:#e8c66a;font-size:13px;margin:0 0 4px}
+.foot{text-align:center;color:var(--mute);font-size:13px;padding:18px 10px 28px;border-top:1px solid var(--line);margin-top:20px}
+nav{display:flex;gap:4px;overflow-x:auto}
+nav button{background:none;border:0;color:#aab4bc;font:600 16px inherit;font-family:inherit;padding:12px 14px;white-space:nowrap;flex:0 0 auto;min-height:44px;border-bottom:3px solid transparent;cursor:pointer}
+nav button.on{color:#fff;border-color:var(--red)}
+main{max-width:1240px;margin:0 auto;padding:16px max(3vw,12px) 60px}
+.view{display:none}.view.on{display:block}
+.nitem{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-inline-start:4px solid var(--amb);border-radius:8px;padding:10px;margin-bottom:8px}
+.nitem.done{border-inline-start-color:#3aa76d;opacity:.8}.nitem.fault{border-inline-start-color:var(--red)}.nitem.fault.done{border-inline-start-color:#3aa76d}
+.nitem .tx{flex:1;white-space:pre-wrap;word-break:break-word;font-size:15px}.nitem .mt{font-size:12.5px;color:var(--mute);margin-top:4px}
+.nitem .ac{display:flex;flex-direction:column;gap:6px}.seg{display:flex;gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:12px}
+.seg button{flex:1;background:none;border:0;color:var(--mute);font:600 15px inherit;font-family:inherit;padding:10px;min-height:44px;cursor:pointer}.seg button.on{background:var(--red);color:#fff}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:end}
+label{display:block;font-size:13px;color:var(--mute);margin-bottom:4px}
+input,select,textarea{font:16px inherit;font-family:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;min-height:44px;width:100%}
+textarea{min-height:60px}
+.f{flex:1 1 140px}
+.btn{font:600 16px inherit;font-family:inherit;min-height:48px;padding:10px 18px;border-radius:8px;border:1px solid var(--ink);background:var(--ink);color:var(--panel);cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink)}
+.btn.red{background:var(--red);border-color:var(--red);color:#fff}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.sm{min-height:38px;padding:6px 12px;font-size:14px}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.drop{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.big{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:130px;border:2px dashed var(--line);border-radius:10px;background:var(--bg);cursor:pointer;font-weight:600;text-align:center;padding:10px}
+.big svg{width:38px;height:38px}
+.big{position:relative;overflow:hidden}
+.big input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:200px;min-height:0;padding:0;border:0}
+.plain{margin-top:10px;font-size:15px}.plain input{background:var(--panel)}
+.res{display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px}
+.res img{width:100%;border-radius:8px;border:1px solid var(--line)}
+.ttl{font-size:20px;font-weight:700;margin:0}
+.chip{display:inline-block;padding:1px 9px;border-radius:99px;font-size:13px;font-weight:600;white-space:nowrap}
+.hi{background:var(--red);color:#fff}.md{background:var(--amb);color:#111}.lo{background:#7c8a96;color:#fff}.okc{background:var(--ok);color:#fff}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{text-align:start;padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:13px;color:var(--mute);font-weight:600}
+td.n{direction:ltr;text-align:end;white-space:nowrap;font-variant-numeric:tabular-nums}
+tr.bad td{background:color-mix(in srgb,var(--red) 10%,transparent)}
+tr.warn td{background:color-mix(in srgb,var(--amb) 12%,transparent)}
+.muted{color:var(--mute);font-size:14px}
+.status{padding:10px;border-radius:8px;background:var(--bg);font-size:15px}
+details summary{cursor:pointer;color:var(--blue);min-height:36px;padding-top:6px}
+.lrow{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,2fr) minmax(0,.8fr) minmax(0,.8fr) minmax(0,.8fr) 100px 40px;gap:6px;margin-bottom:6px}.lrow input,.lrow select{min-height:40px;padding:6px 8px;font-size:15px}
+.prev{position:relative}.prev canvas{width:100%;height:auto;border-radius:8px;border:1px solid var(--line);display:block}
+.add1{background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;min-height:34px;padding:2px 10px;font:inherit;font-size:13px;cursor:pointer}
+.fault{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) 110px 40px;gap:6px;margin-bottom:6px;align-items:center}
+.fault input,.fault select{min-height:40px;padding:6px 8px;font-size:15px}
+.x{background:none;border:0;color:var(--red);font-size:22px;cursor:pointer;min-height:40px}
+.log-item{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.log-item img{width:72px;height:54px;object-fit:cover;border-radius:6px}
+.spin{display:inline-block;width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--red);border-radius:50%;animation:s 1s linear infinite;vertical-align:-3px;margin-inline-end:6px}
+@keyframes s{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.spin{animation:none}}
+.sheets{overflow-x:auto;padding:10px 0}
+.a4{width:794px;height:1123px;background:#fff;color:#000;margin:0 auto 16px;padding:42px 40px;box-shadow:0 2px 10px #0003;display:flex;flex-direction:column;font-family:"IBM Plex Sans Arabic",Tahoma,sans-serif}
+.a4 .hd{display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:10px}
+.a4 h2{font-size:20px;margin:0}.a4 .s{font-size:12px;color:#333}
+.a4 .meta{display:grid;grid-template-columns:repeat(4,1fr);gap:4px 12px;font-size:12px;margin-bottom:10px;border:1px solid #000;padding:6px 8px}
+.a4 .body{flex:1;overflow:hidden}
+.a4 table{font-size:11px;border:1px solid #000}
+.a4 th,.a4 td{border:1px solid #000;padding:4px 5px;color:#000}
+.a4 th{background:#e3e7ea;font-weight:700;font-size:11px}
+.a4 .sum{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;margin-bottom:8px}
+.a4 .ft{display:flex;justify-content:space-between;font-size:12px;border-top:1px solid #000;padding-top:10px;margin-top:8px}
+.a4 .sig{width:30%;text-align:center}.a4 .sig div{border-top:1px solid #000;margin-top:28px;padding-top:3px}
+.a4 .pg{font-size:11px;text-align:center;margin-top:6px}
+.a4 .thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.a4 .thumbs img{width:100%;border:1px solid #000}.a4 .thumbs p{font-size:10px;margin:2px 0 0}
+.tray{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px}.tray div{position:relative}.tray img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;border:1px solid var(--line);display:block}.tray button{position:absolute;top:2px;inset-inline-end:2px;width:30px;height:30px;border-radius:50%;border:0;background:#000b;color:#fff;font-size:18px;cursor:pointer}
+.savebar{position:sticky;bottom:0;display:none;gap:12px;align-items:center;justify-content:space-between;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;box-shadow:0 -4px 16px #0002;margin-top:10px;z-index:5}
+.crp{display:block;height:44px;max-width:100%;object-fit:contain;border-radius:4px;border:1px solid var(--line);background:#fff}
+.sr .crp{grid-column:1/-1;order:-2;justify-self:start}
+.nrow .crp{height:30px;flex:0 0 auto}
+.miss{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.miss button{background:none;border:1px dashed var(--amb);color:var(--ink);border-radius:99px;padding:4px 10px;min-height:34px;font:inherit;font-size:13px;cursor:pointer}
+.prev canvas{cursor:crosshair;touch-action:manipulation}
+.pv{overflow:auto;max-height:70vh;border-radius:8px}.pv.z canvas{width:220%!important;max-width:none}
+.zb{margin-top:6px}
+.normals{margin-top:10px}.nrow{flex-wrap:wrap}.nrow .ni{width:auto;flex:1 1 90px;min-height:38px;padding:4px 8px;font-size:15px}.nrow .nv{flex:0 1 80px}.nrow .x{min-height:38px}
+.tplb{margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:8px}
+.cal{position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;flex-direction:column}
+.calhd{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#0d0f11;color:#fff}.calhd b{flex:1}.calhd .btn{color:#fff;border-color:#fff}
+.calimg{flex:1;overflow:auto;background:#222;direction:ltr}.calimg canvas{display:block;cursor:crosshair;touch-action:manipulation}
+.calft{padding:10px 12px 14px;background:var(--panel);border-top:1px solid var(--line);font-size:16px}.nrow{display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}.nrow span{flex:1}
+.toast{position:fixed;bottom:16px;inset-inline:16px;max-width:480px;margin:auto;background:#0d0f11;color:#fff;padding:12px 16px;border-radius:8px;display:none;z-index:9}
+@media(max-width:700px){.res{grid-template-columns:minmax(0,1fr)}.res img{max-height:220px;object-fit:contain}
+.fault,.lrow{grid-template-columns:minmax(0,1fr) minmax(0,1fr);padding:8px;border:1px solid var(--line);border-radius:8px}.fault .w,.lrow .w{grid-column:1/-1}
+.fault.sr{grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.sr .w{order:-1}.sr select{grid-column:span 2}
+table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:8px;border-bottom:1px solid var(--line)}.stack td{display:flow-root;border:0;padding:2px 0;padding-inline-start:7em;text-align:start}.stack td::before{content:attr(data-l);float:inline-start;width:6.5em;margin-inline-start:-7em;color:var(--mute);font-size:12px}.stack td:empty{display:none}}
+</style>
+<script>new MutationObserver(()=>{for(const c of document.querySelectorAll('.stack td:not([data-l])')){let i=0,p=c;while(p=p.previousElementSibling)i+=p.colSpan;c.dataset.l=c.closest('table').rows[0].cells[i]?.textContent||''}}).observe(document,{childList:true,subtree:true})</script>
+</head>
+<body>
+<header>
+  <h1>سجل أعطال شاشات HMI — GT Frame 9E</h1>
+  <p class="sub sig1">تصميم وبرمجة: م. محمد علي محمد صبيح — محطة شط البصرة الغازية · © 2026 جميع الحقوق محفوظة</p>
+  <p class="sub">صوّر الشاشة أو ارفع صورتها ← قراءة الأرقام (OCR) وكشف ألوان الإنذار ومقارنة الحدود ← تقرير A4 للتنزيل PDF والطباعة</p>
+  <nav><button data-v="cap" class="on">التحليل</button><button data-v="site">ملاحظات الموقع</button><button data-v="log">السجل</button><button data-v="lim">الحدود</button><button data-v="rep">التقرير A4</button></nav>
+</header>
+<main>
+<section id="cap" class="view on">
+  <div class="card">
+    <div class="row">
+      <div class="f"><label for="unit">الوحدة</label><select id="unit"></select></div>
+      <div class="f"><label for="shift">الوجبة</label><select id="shift"><option>صباحي</option><option>مناوب</option></select></div>
+      <div class="f"><label for="eng">المهندس المناوب</label><input id="eng" placeholder="الاسم"></div>
+      <div class="f"><label for="ustate">حالة الوحدة</label><select id="ustate"><option value="auto">تلقائي (من Speed)</option><option value="run">تعمل (Online)</option><option value="stop">متوقفة / Cooldown</option></select></div>
+    </div>
+    <div class="row" style="margin-top:10px;align-items:center">
+      <label style="display:flex;gap:6px;align-items:center;margin:0;color:var(--ink);flex:1 1 220px"><input type="checkbox" id="ign" style="width:22px;min-height:22px" checked> تجاهل شريط الإنذارات أسفل الشاشة</label>
+      <div style="flex:0 1 150px"><select id="ignp" aria-label="ارتفاع الشريط"><option value="0.1">أسفل 10%</option><option value="0.15">أسفل 15%</option><option value="0.2">أسفل 20%</option><option value="0.25" selected>أسفل 25%</option><option value="0.33">أسفل الثلث</option></select></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="drop">
+      <div class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="4"/></svg>التقاط بالكاميرا<input id="cam" type="file" accept="image/*" capture="environment" aria-label="التقاط بالكاميرا"></div>
+      <div class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v4h16v-4"/></svg>رفع صورة محفوظة<br><span class="muted">يمكن اختيار عدة صور</span><input id="up" type="file" accept="image/*" multiple aria-label="رفع صورة"></div>
+    </div>
+    <div class="plain"><label for="alt">إذا لم تعمل الأزرار أعلاه، اختر الصورة من هنا:</label><input id="alt" type="file" accept="image/*,.jpg,.jpeg,.png,.heic" multiple></div>
+    <p class="muted" id="aiNote" style="margin:10px 0 0">القراءة تتم داخل الهاتف بمحرك <b style="color:var(--ink)">PaddleOCR</b> المفتوح المصدر — مجاني، بدون أي API أو حساب. أول استخدام يحمّل المحرك (~32 MB) مرة واحدة، يُفضّل على Wi-Fi. كل صفحة تأخذ تقريباً 10–40 ثانية حسب الهاتف.<br><b style="color:var(--ink)">للتصوير:</b> الشاشة كاملة داخل الصورة، الهاتف موازٍ للشاشة، بدون تكبير رقمي.</p>
+  </div>
+  <div class="card" id="trayCard" style="display:none">
+    <h3 class="ttl">الصور المختارة <span class="muted" id="trayN"></span></h3>
+    <p class="muted" style="margin:2px 0 8px">أضف صوراً أخرى بالكاميرا أو من المعرض، ثم اضغط «تحليل الكل».</p>
+    <div class="tray" id="tray"></div>
+    <div class="row" style="margin-top:10px"><button class="btn red" id="runAll">تحليل الكل</button><button class="btn ghost" id="clrTray">مسح الاختيار</button></div>
+  </div>
+  <div id="queue"></div>
+  <div class="savebar" id="saveBar"><span id="saveN"></span><button class="btn red" id="saveAll">حفظ الكل في السجل</button></div>
+</section>
+
+<section id="site" class="view">
+  <div class="seg" role="tablist"><button class="on" data-k="fault">أعطال الموقع</button><button data-k="maint">أعمال الصيانة</button></div>
+  <div class="card">
+    <h3 class="ttl" id="nTtl">إضافة أعطال الموقع</h3>
+    <p class="muted" style="margin:2px 0 10px">اكتب كل نقطة بسطر منفصل — كل سطر يُحفظ كنقطة مستقلة.</p>
+    <div class="row">
+      <div class="f"><label for="nUnit">الوحدة</label><select id="nUnit"><option>عام / المحطة</option></select></div>
+      <div class="f"><label for="nDate">التاريخ</label><input id="nDate" type="date"></div>
+      <div class="f"><label for="nShift">الوجبة</label><select id="nShift"><option>صباحي</option><option>مناوب</option></select></div>
+      <div class="f"><label for="nTime" id="nTimeL">ساعة تسجيل العطل</label><input id="nTime" type="time"></div>
+      <div class="f"><label for="nEq">المعدة / المكان (اختياري)</label><input id="nEq" placeholder="مثلاً: Lube oil pump 88QA"></div>
+    </div>
+    <div style="margin-top:10px"><label for="nText">النقاط</label><textarea id="nText" rows="5" placeholder="تسريب زيت من فلنج مضخة الزيت&#10;صوت غير طبيعي بمروحة 88BT"></textarea></div>
+    <div class="row" style="margin-top:10px"><button class="btn red" id="nAdd">إضافة النقاط</button></div>
+  </div>
+  <div class="card">
+    <div class="row" style="margin-bottom:10px"><div class="f"><label for="nFil">عرض</label><select id="nFil"><option value="open">المفتوحة فقط</option><option value="all">الكل</option></select></div><div class="f"><label for="nFu">الوحدة</label><select id="nFu"><option value="">الكل</option><option>عام / المحطة</option></select></div></div>
+    <div id="nList" class="muted">لا توجد نقاط بعد.</div>
+  </div>
+</section>
+
+<section id="log" class="view">
+  <div class="card">
+    <div class="row"><div class="f"><label for="lq">بحث</label><input id="lq" placeholder="Tag أو اسم صفحة أو وصف"></div>
+    <div class="f"><label for="lu">الوحدة</label><select id="lu"><option value="">الكل</option></select></div></div>
+  </div>
+  <div class="card"><div id="logList" class="muted">جارٍ التحميل…</div></div>
+</section>
+
+<section id="lim" class="view">
+  <div class="card">
+    <h3 class="ttl">قوالب الصفحات (المعايرة)</h3>
+    <p class="muted" style="margin:4px 0 10px">القالب يحفظ مكان كل قيمة وTag مالها وعدد مراتبها العشرية لصفحة معينة. الصور القادمة لنفس الصفحة تُقرأ من نفس المواقع، فتصير القراءة أدق بكثير.</p>
+    <div id="tplList"></div>
+  </div>
+  <div class="card">
+    <h3 class="ttl">جدول الحدود</h3>
+    <p class="muted" style="margin:4px 0 10px">«تحميل حدود ملزمة Duhok» يضيف حدود الإنذار/التريب المكتوبة في ملزمة P&amp;ID (رقم الصفحة مذكور بكل سطر). يمكن إضافة أكثر من سطر لنفس الـTag (مثل H و HH). أدخل حدود الإنذار لكل Tag من الـ Control Specification للوحدات. أي قراءة يقرأها التطبيق بنفس الـTag وتكون أقل من Min أو أكثر من Max تُسجَّل عطلاً تلقائياً. اترك Min أو Max فارغاً إذا لا ينطبق.</p>
+    <div class="row" style="margin-bottom:10px"><div class="f"><label for="limPage">عرض حدود صفحة</label><select id="limPage"><option value="">كل الصفحات</option></select></div><div class="f" style="flex:0 1 auto"><button class="btn ghost sm" id="limFill" style="display:none">+ أضف Tags الصفحة بدون حد</button></div></div>
+    <p class="muted" id="limInfo" style="margin:0 0 8px"></p>
+    <div id="limRows"></div>
+    <div class="row" style="margin-top:10px"><button class="btn red sm" id="limPreset">تحميل حدود ملزمة Duhok (P&amp;ID)</button><button class="btn ghost sm" id="limAdd">+ إضافة Tag</button><button class="btn ghost sm" id="limClear">مسح الكل</button><button class="btn sm" id="limSave">حفظ الحدود</button></div>
+    <details style="margin-top:12px"><summary>إدخال جماعي (لصق)</summary>
+      <p class="muted">سطر لكل Tag بالشكل: <span dir="ltr">TAG,الوصف,Min,Max,الوحدة,hi|md|lo</span></p>
+      <textarea id="limPaste" dir="ltr" rows="6" placeholder="BT1J1,حرارة معدن المسند 1,,220,DEGF,md"></textarea>
+      <button class="btn ghost sm" id="limImport" style="margin-top:6px">إضافة الأسطر</button>
+    </details>
+  </div>
+</section>
+
+<section id="tplv" class="view"></section>
+<section id="rep" class="view">
+  <div class="card">
+    <div class="row">
+      <div class="f"><label for="d1">من تاريخ</label><input id="d1" type="date"></div>
+      <div class="f"><label for="d2">إلى تاريخ</label><input id="d2" type="date"></div>
+      <div class="f"><label for="ru">الوحدة</label><select id="ru"><option value="">كل الوحدات</option></select></div>
+      <div class="f"><label for="rt">عنوان التقرير</label><input id="rt" value="تقرير المتحسسات العاطلة — شاشات HMI"></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label style="display:flex;gap:6px;align-items:center;margin:0;color:var(--ink)"><input type="checkbox" id="rthumb" style="width:22px;min-height:22px" checked> إرفاق صور الشاشات</label>
+      <label style="display:flex;gap:6px;align-items:center;margin:0;color:var(--ink)"><input type="checkbox" id="rsite" style="width:22px;min-height:22px" checked> إرفاق أعطال الموقع وأعمال الصيانة</label>
+      <label style="display:flex;gap:6px;align-items:center;margin:0;color:var(--ink)"><input type="checkbox" id="rnorm" style="width:22px;min-height:22px" checked> ذكر الصفحات السليمة في الملخص</label>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn red" id="pdfBtn">تنزيل PDF</button>
+      <button class="btn ghost" id="htmlBtn">تنزيل نسخة للطباعة (HTML)</button>
+    </div>
+    <p class="muted" id="repMsg" style="margin:8px 0 0">للطباعة: افتح ملف PDF من الهاتف واختر طباعة، أو افتح نسخة HTML في المتصفح واضغط طباعة.</p>
+  </div>
+  <div class="sheets" id="sheets"></div>
+</section>
+</main>
+<footer class="foot" id="sigFoot">تطبيق «سجل أعطال HMI» لتوربينات GE Frame 9E · تصميم وبرمجة <b>م. محمد علي محمد صبيح</b> — محطة شط البصرة الغازية<br>© 2026 جميع الحقوق محفوظة. لا يجوز نسخ التطبيق أو إعادة نشره أو نسبه لغير مؤلفه دون إذن خطي.</footer>
+<div class="toast" id="toast"></div>
+<datalist id="pglist"></datalist>
+<script src="ocr/tesseract.min.js"></script>
+<script src="pp/ort.wasm.min.js"></script>
+<script src="lib/html2canvas.min.js"></script>
+<script src="lib/jspdf.umd.min.js"></script>
+<script src="app/shim.js"></script>
+<script>
+{
+const $=s=>document.querySelector(s);
+{const f=document.getElementById('sigFoot'),h=document.querySelector('.sig1');if(!f||!/محمد علي محمد صبيح/.test(f.textContent)||!h||!/محمد علي محمد صبيح/.test(h.textContent)){document.body.innerHTML='<p style="padding:30px;font:18px sans-serif">نسخة غير أصلية من التطبيق. التطبيق من تصميم م. محمد علي محمد صبيح.</p>';throw new Error('unsigned copy')}}
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const SEV={hi:['عالٍ','hi'],md:['متوسط','md'],lo:['منخفض','lo']};
+const UNITS=Array.from({length:10},(_,i)=>'GT'+(i+1));
+for(const id of ['#unit','#lu','#ru','#nUnit','#nFu'])$(id).insertAdjacentHTML('beforeend',UNITS.map(u=>`<option>${u}</option>`).join(''));
+const today=(d=>new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10))(new Date());$('#nDate').value=today;$('#d1').value=today;$('#d2').value=today;
+try{const p=JSON.parse(localStorage.getItem('hmi-prefs2')||'{}');if(p.unit)$('#unit').value=p.unit;if(p.eng)$('#eng').value=p.eng;if(p.shift)$('#shift').value=/صباح/.test(p.shift)?'صباحي':'مناوب';if(p.ustate)$('#ustate').value=p.ustate;if(p.ign!==undefined)$('#ign').checked=p.ign;if(p.ignp)$('#ignp').value=p.ignp;}catch(e){}
+const savePrefs=()=>{try{localStorage.setItem('hmi-prefs2',JSON.stringify({unit:$('#unit').value,eng:$('#eng').value,shift:$('#shift').value,ustate:$('#ustate').value,ign:$('#ign').checked,ignp:$('#ignp').value}))}catch(e){}};
+['#unit','#eng','#shift','#ustate','#ign','#ignp'].forEach(s=>$(s).addEventListener('change',savePrefs));
+const toast=m=>{const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',3500)};
+
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id===b.dataset.v));if(b.dataset.v==='log')renderLog();if(b.dataset.v==='site')renderNotes();if(b.dataset.v==='rep')renderReport();});
+
+let db=null,uid=null,records=[],limits=[],templates={},notes=[];
+(async()=>{db=await claude.use('db');const user=await claude.use('user');uid=user?await user.id():null;if(!db||!uid){loadLocal();return;}
+  const tm=setTimeout(()=>{$('#logList').textContent='تعذّر الوصول إلى السجل المحفوظ حالياً.'},10000);
+  db.collection('data/users/'+uid).orderBy('ts','desc').onSnapshot(s=>{if(!s.metadata.fromCache)clearTimeout(tm);const lim=s.docs.find(d=>d.id==='limits');if(lim&&!limDirty){limits=(lim.data().items||[]).map(x=>({...x}));renderLim()}templates={};s.docs.filter(d=>d.id.startsWith('tpl-')).forEach(d=>{const t=d.data();if(t&&t.page)templates[t.page]=t});renderTpl();notes=s.docs.filter(d=>d.id.startsWith('note-')).map(d=>({...d.data(),id:d.id}));renderNotes();records=s.docs.filter(d=>d.id!=='limits'&&!d.id.startsWith('tpl-')&&!d.id.startsWith('note-')).map(d=>({...d.data(),id:d.id}));renderLog();if($('#rep').classList.contains('on'))renderReport();},e=>{clearTimeout(tm);loadLocal();});
+})();
+function loadLocal(){try{records=JSON.parse(localStorage.getItem('hmi-recs')||'[]');limits=JSON.parse(localStorage.getItem('hmi-lims')||'[]');templates=JSON.parse(localStorage.getItem('hmi-tpls')||'{}');notes=JSON.parse(localStorage.getItem('hmi-notes')||'[]')}catch(e){records=[]}renderNotes();renderLog();renderLim();renderTpl();}
+/* ===== site notes: field faults + maintenance works (manual points) ===== */
+const nowHM=()=>{const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};$('#nTime').value=nowHM();
+let nKind='fault';const NK={fault:['أعطال الموقع','مفتوح','تم الإصلاح'],maint:['أعمال الصيانة','قيد العمل','منجز']};
+function localNotes(){try{localStorage.setItem('hmi-notes',JSON.stringify(notes))}catch(e){}}
+async function putNote(n){if(db&&uid)await db.collection('data/users/'+uid).doc(n.id).set(n);else{notes=[n,...notes.filter(x=>x.id!==n.id)];localNotes();renderNotes()}}
+async function delNote(id){if(db&&uid)await db.collection('data/users/'+uid).doc(id).delete();else{notes=notes.filter(x=>x.id!==id);localNotes();renderNotes()}}
+document.querySelectorAll('#site .seg button').forEach(b=>b.onclick=()=>{nKind=b.dataset.k;document.querySelectorAll('#site .seg button').forEach(x=>x.classList.toggle('on',x===b));$('#nTtl').textContent='إضافة '+NK[nKind][0];$('#nTimeL').textContent=nKind==='fault'?'ساعة تسجيل العطل':'ساعة بدء العمل';$('#nTime').value=nowHM();$('#nText').placeholder=nKind==='fault'?'تسريب زيت من فلنج مضخة الزيت\nصوت غير طبيعي بمروحة 88BT':'تبديل فلتر الزيت\nمعايرة متحسس الضغط 96FG-1';renderNotes()});
+$('#nAdd').onclick=async e=>{const lines=$('#nText').value.split(/\n+/).map(t=>t.replace(/^\s*[-•*\d.)]+\s*/,'').trim()).filter(Boolean);if(!lines.length){toast('اكتب نقطة واحدة على الأقل');return}
+  const b=e.target;b.disabled=true;const base=Date.now();
+  try{for(let i=0;i<lines.length;i++)await putNote({id:'note-'+(base+i)+Math.random().toString(36).slice(2,5),kind:nKind,ts:base+i,date:$('#nDate').value||today,unit:$('#nUnit').value,shift:$('#nShift').value,time:$('#nTime').value||nowHM(),eq:$('#nEq').value.trim(),text:lines[i],done:false,eng:$('#eng').value});
+    $('#nText').value='';$('#nTime').value=nowHM();toast('أضيفت '+lines.length+' نقطة')}catch(err){toast('تعذّر الحفظ')}b.disabled=false};
+function nTimes(n){const a=n.time?(n.kind==='fault'?'سُجّل ':'بدأ ')+n.time:'';const b=n.done&&n.doneTime?(n.kind==='fault'?'أُصلح ':'أُنجز ')+(n.doneDate&&n.doneDate!==n.date?n.doneDate+' ':'')+n.doneTime:'';return [a,b].filter(Boolean).join(' · ')}
+function renderNotes(){const el=$('#nList');if(!el)return;const f=$('#nFil').value,u=$('#nFu').value;
+  const L=notes.filter(n=>n.kind===nKind&&(f==='all'||!n.done)&&(!u||n.unit===u)).sort((a,b)=>(b.date||'').localeCompare(a.date||'')||b.ts-a.ts);
+  el.innerHTML=L.length?L.map(n=>`<div class="nitem ${n.kind}${n.done?' done':''}" data-id="${esc(n.id)}"><div style="flex:1"><div class="tx">${esc(n.text)}</div><div class="mt">${esc(n.unit)}${n.eq?' · '+esc(n.eq):''} · ${esc(n.date)} · ${esc(n.shift||'')}${nTimes(n)?' · '+esc(nTimes(n)):''} · <b>${NK[n.kind][n.done?2:1]}</b></div></div><div class="ac"><button class="btn sm" data-a="t">${n.done?'إعادة فتح':NK[n.kind][2]}</button><button class="btn ghost sm" data-a="e">تعديل</button><button class="btn ghost sm" data-a="d">حذف</button></div></div>`).join(''):'<span class="muted">لا توجد نقاط '+(f==='open'?'مفتوحة':'')+'.</span>'}
+$('#nFil').onchange=renderNotes;$('#nFu').onchange=renderNotes;
+$('#nList').addEventListener('click',async e=>{const a=e.target.dataset.a;if(!a)return;const it=e.target.closest('.nitem');const n=notes.find(x=>x.id===it.dataset.id);if(!n)return;
+  if(a==='t'){const d=new Date(),dd=(x=>new Date(x-x.getTimezoneOffset()*6e4).toISOString().slice(0,10))(d);await putNote({...n,done:!n.done,doneDate:!n.done?dd:'',doneTime:!n.done?nowHM():''})}
+  else if(a==='d'){if(e.target.dataset.c){await delNote(n.id)}else{e.target.dataset.c='1';e.target.textContent='تأكيد الحذف';setTimeout(()=>{if(e.target.isConnected){delete e.target.dataset.c;e.target.textContent='حذف'}},3000)}}
+  else if(a==='e'){const tx=it.querySelector('.tx');if(tx.querySelector('textarea'))return;tx.innerHTML=`<textarea rows="3">${esc(n.text)}</textarea><input data-f="eq" placeholder="المعدة / المكان" value="${esc(n.eq||'')}" style="margin-top:6px"><div class="row" style="margin-top:6px"><div class="f"><label>${n.kind==='fault'?'ساعة التسجيل':'ساعة البدء'}</label><input data-f="time" type="time" value="${esc(n.time||'')}"></div>${n.done?`<div class="f"><label>${n.kind==='fault'?'ساعة الإصلاح':'ساعة الإنجاز'}</label><input data-f="doneTime" type="time" value="${esc(n.doneTime||'')}"></div>`:''}</div><button class="btn red sm" style="margin-top:6px">حفظ</button>`;tx.querySelector('textarea').focus();
+    tx.querySelector('button').onclick=async()=>{const t=tx.querySelector('textarea').value.trim();if(!t)return;const g=f=>{const x=tx.querySelector(`[data-f=${f}]`);return x?x.value.trim():n[f]||''};await putNote({...n,text:t,eq:g('eq'),time:g('time'),doneTime:g('doneTime')})}}});
+function notesFor(kind){const a=$('#d1').value||'0000',b=$('#d2').value||'9999',u=$('#ru').value;
+  /* in the period, plus anything still open from before */
+  return notes.filter(n=>n.kind===kind&&(!u||n.unit===u||n.unit==='عام / المحطة')&&((n.date>=a&&n.date<=b)||(!n.done&&n.date<a))).sort((x,y)=>(x.unit||'').localeCompare(y.unit||'','en',{numeric:true})||(x.date||'').localeCompare(y.date||'')||x.ts-y.ts)}
+const tplId=n=>'tpl-'+n.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+async function saveTpl(t){templates[t.page]=t;if(db&&uid)await db.collection('data/users/'+uid).doc(tplId(t.page)).set(t);else localStorage.setItem('hmi-tpls',JSON.stringify(templates));renderTpl()}
+async function delTpl(n){delete templates[n];if(db&&uid)await db.collection('data/users/'+uid).doc(tplId(n)).delete();else localStorage.setItem('hmi-tpls',JSON.stringify(templates));renderTpl()}
+function renderTpl(){const el=document.getElementById('tplList');if(!el)return;const ks=Object.keys(templates);el.innerHTML=ks.length?ks.map(k=>`<div class="nrow"><span><b>${esc(k)}</b> — ${templates[k].items.length} قيمة · ${esc(new Date(templates[k].ts).toLocaleDateString('ar-IQ'))}</span><button class="add1" data-dt="${esc(k)}">حذف</button></div>`).join(''):'<p class="muted">لا توجد قوالب بعد. صوّر صفحة، صحّح قيمها، ثم اضغط «حفظ كقالب للصفحة».</p>'}
+async function persist(rec){if(db&&uid){await db.collection('data/users/'+uid).doc(rec.id).set(rec);}else{records=[rec,...records.filter(r=>r.id!==rec.id)];try{localStorage.setItem('hmi-recs',JSON.stringify(records))}catch(e){toast('تعذّر الحفظ في هذا المتصفح')}renderLog();}}
+async function removeRec(id){if(db&&uid)await db.collection('data/users/'+uid).doc(id).delete();else{records=records.filter(r=>r.id!==id);try{localStorage.setItem('hmi-recs',JSON.stringify(records))}catch(e){}renderLog();}}
+
+/* ---------- limits table ---------- */
+let limDirty=false;
+const normTag=t=>String(t||'').toUpperCase().replace(/[\s_\-.:]/g,'').replace(/O/g,'0');
+function renderLim(){const el=$('#limRows');const pgn=$('#limPage').value,pp=window.__PAGES?window.__PAGES.find(p=>p.n===pgn):null,PT=pp?new Set(pp.tags.map(normTag)):null;
+  if(pp){const withL=pp.tags.filter(t=>limits.some(l=>normTag(l.tag)===normTag(t)));$('#limInfo').textContent=`${pp.n}: ${pp.tags.length} Tag — ${withL.length} منها لها حدود، ${pp.tags.length-withL.length} بدون حد.`;$('#limFill').style.display=withL.length<pp.tags.length?'':'none'}else{$('#limInfo').textContent=limits.length?limits.length+' سطر حدود.':'';$('#limFill').style.display='none'}
+  const shown=limits.map((l,i)=>[l,i]).filter(([l])=>!PT||PT.has(normTag(l.tag)));el.innerHTML=shown.length?shown.map(([l,i])=>`<div class="lrow" data-i="${i}"><input data-k="tag" dir="ltr" placeholder="Tag" value="${esc(l.tag)}"><input class="w" data-k="desc" placeholder="الوصف" value="${esc(l.desc)}"><input data-k="min" dir="ltr" inputmode="decimal" placeholder="Min" value="${esc(l.min)}"><input data-k="max" dir="ltr" inputmode="decimal" placeholder="Max" value="${esc(l.max)}"><input data-k="unit" dir="ltr" placeholder="الوحدة" value="${esc(l.unit)}"><select data-k="severity">${Object.entries(SEV).map(([k,v])=>`<option value="${k}"${k===l.severity?' selected':''}>${v[0]}</option>`).join('')}</select><button class="x" aria-label="حذف">×</button></div>`).join(''):'<p class="status">لا توجد حدود بعد. أضف الـTags التي تريد مراقبتها.</p>'}
+$('#limRows').addEventListener('input',e=>{const r=e.target.closest('.lrow');if(r&&e.target.dataset.k){limits[+r.dataset.i][e.target.dataset.k]=e.target.value;limDirty=true}});
+$('#limRows').addEventListener('click',e=>{if(e.target.classList.contains('x')){limits.splice(+e.target.closest('.lrow').dataset.i,1);limDirty=true;renderLim()}});
+$('#limAdd').onclick=()=>{limits.push({tag:'',desc:'',min:'',max:'',unit:'',severity:'md'});limDirty=true;renderLim()};
+$('#limImport').onclick=()=>{const ls=$('#limPaste').value.split(/\n/).map(l=>l.split(/[,\t;]/).map(x=>x.trim())).filter(a=>a[0]);ls.forEach(a=>limits.push({tag:a[0],desc:a[1]||'',min:a[2]||'',max:a[3]||'',unit:a[4]||'',severity:SEV[a[5]]?a[5]:'md'}));$('#limPaste').value='';limDirty=true;renderLim();toast('أُضيف '+ls.length+' سطر — اضغط «حفظ الحدود»')};
+$('#limSave').onclick=async e=>{const b=e.target;limits=limits.filter(l=>l.tag);b.disabled=true;try{if(db&&uid)await db.collection('data/users/'+uid).doc('limits').set({items:limits});else localStorage.setItem('hmi-lims',JSON.stringify(limits));limDirty=false;renderLim();toast('حُفظت الحدود')}catch(err){toast('تعذّر حفظ الحدود')}b.disabled=false};
+const PRESET=[
+/* MLI 0416 Lube Oil — ص31 */
+['LT-OT-1','حرارة زيت خزان التزييت — H (ص31)','','76.6','°C','md'],['LT-OT-1','حرارة زيت خزان التزييت — HH (ص31)','','82.2','°C','hi'],['LT-OT-1','حرارة زيت خزان التزييت — L (ص31)','21.1','','°C','md'],['LT-OT-1','حرارة زيت خزان التزييت — LL (ص31)','12.7','','°C','hi'],
+['LT-OT-2','حرارة زيت خزان التزييت — H (ص31)','','76.6','°C','md'],['LT-OT-2','حرارة زيت خزان التزييت — HH (ص31)','','82.2','°C','hi'],['LT-OT-2','حرارة زيت خزان التزييت — L (ص31)','21.1','','°C','md'],['LT-OT-2','حرارة زيت خزان التزييت — LL (ص31)','12.7','','°C','hi'],
+['96QA-2','ضغط زيت التزييت — ضبط مفتاح الضغط المنخفض 63QA-2 (ص31)','2.8','','bar','hi'],
+/* ص32 bearing drains */
+['LT-BT1D-1','حرارة تصريف المسند الدفعي #1 — H (ص32)','','100','°C','md'],['LT-BT1D-1','حرارة تصريف المسند الدفعي #1 — HH (ص32)','','111.1','°C','hi'],
+['LT-B1D-1','حرارة تصريف المسند #1 — H (ص32)','','100','°C','md'],['LT-B1D-1','حرارة تصريف المسند #1 — HH (ص32)','','111.1','°C','hi'],
+['LT-B2D-1','حرارة تصريف المسند #2 — H (ص32)','','100','°C','md'],['LT-B2D-1','حرارة تصريف المسند #2 — HH (ص32)','','111.1','°C','hi'],
+['LT-B3D-1','حرارة تصريف المسند #3 — H (ص32)','','100','°C','md'],['LT-B3D-1','حرارة تصريف المسند #3 — HH (ص32)','','111.1','°C','hi'],
+['LT-G1D-1','حرارة تصريف مسند المولد #1 — H (ص32)','','96.1','°C','md'],['LT-G1D-1','حرارة تصريف مسند المولد #1 — HH (ص32)','','107.2','°C','hi'],
+['LT-G2D-1','حرارة تصريف مسند المولد #2 — H (ص32)','','96.1','°C','md'],['LT-G2D-1','حرارة تصريف مسند المولد #2 — HH (ص32)','','107.2','°C','hi'],
+['96QT-2B','ضغط زيت مساند المولد — ضبط مفتاح 63QT-2A (ص32)','0.56','','bar','hi'],
+/* ص45 Generator */
+...['BT-GJ1-1A','BT-GJ1-1B','BT-GJ1-2A','BT-GJ1-2B'].map(t=>[t,'حرارة معدن مسند المولد #1 — Alarm (ص45)','','126.6','°C','md']),
+...['BT-GJ2-1A','BT-GJ2-1B','BT-GJ2-2A','BT-GJ2-2B'].map(t=>[t,'حرارة معدن مسند المولد #2 — Alarm (ص45)','','126.6','°C','md']),
+...['LT-G1D-1A','LT-G1D-1B'].map(t=>[t,'حرارة زيت تصريف مسند المولد #1 — Alarm (ص45)','','93.3','°C','md']),
+...['LT-G2D-1A','LT-G2D-1B'].map(t=>[t,'حرارة زيت تصريف مسند المولد #2 — Alarm (ص45)','','93.3','°C','md']),
+...['DT-GSF-1','DT-GSF-2','DT-GSF-3','DT-GSF-7','DT-GSF-8','DT-GSF-9'].map(t=>[t,'حرارة الجزء الثابت للمولد (جهة القارنة) — Alarm (ص45)','','129','°C','md']),
+...['DT-GSA-4','DT-GSA-5','DT-GSA-6','DT-GSA-20','DT-GSA-21','DT-GSA-22'].map(t=>[t,'حرارة الجزء الثابت للمولد (جهة المجمّع) — Alarm (ص45)','','129','°C','md']),
+['DT-GGC-10','حرارة الغاز البارد للمولد (جهة القارنة) — Alarm (ص45)','','50','°C','md'],['DT-GGC-11','حرارة الغاز البارد للمولد (جهة المجمّع) — Alarm (ص45)','','50','°C','md'],
+['DT-GGH-18','حرارة الغاز الساخن للمولد (جهة القارنة) — Alarm (ص45)','','100','°C','md'],['DT-GGH-19','حرارة الغاز الساخن للمولد (جهة المجمّع) — Alarm (ص45)','','100','°C','md'],
+/* MLI 0425 Atomizing Air — ص8 */
+['AAT-1A','حرارة هواء التذرية بعد المبرّد — High (إطفاء بعد 2 دقيقة) (ص8)','','132','°C','hi'],['AAT-1A','حرارة هواء التذرية — Alarm 90 (ص8: Low Alarm، أثناء التشغيل)','90','','°C','md',1],
+['AAT-2A','حرارة هواء التذرية بعد المبرّد — High (إطفاء بعد 2 دقيقة) (ص8)','','132','°C','hi'],['AAT-2A','حرارة هواء التذرية — Alarm 90 (ص8: Low Alarm، أثناء التشغيل)','90','','°C','md',1],
+['96AD-1','فرق ضغط ضاغط هواء التذرية — Low، أثناء التشغيل (ص8)','0.4','','bar','md',1],
+/* MLI 0422 Gas Fuel — ص9، ص10 */
+...['FTG-1','FTG-2','FTG-3','FTG'].map(t=>[t,'حرارة غاز الوقود — Shutdown (ص9)','','186.6','°C','hi']),
+...['FTG-1','FTG-2','FTG-3','FTG'].map(t=>[t,'حرارة غاز الوقود — Trip (ص9)','','200','°C','hi']),
+['96FG-1','ضغط مدخل وحدة غاز الوقود — High (ص10)','','25.8','bar','md'],['96FG-1','ضغط مدخل وحدة غاز الوقود — Low، أثناء التشغيل (ص10)','23.4','','bar','md',1],['96FG-1','ضغط مدخل وحدة غاز الوقود — LowLow، أثناء التشغيل (ص10)','20.6','','bar','hi',1],
+/* MLI 0436 Heating & Ventilation — ص14، ص15 */
+...['AT-TC-1','AT-TC-2','AT-TC-3'].map(t=>[t,'حرارة مقصورة التوربين — H (ص14)','','125','°C','md']),...['AT-TC-1','AT-TC-2','AT-TC-3'].map(t=>[t,'حرارة مقصورة التوربين — L (ص14)','10','','°C','lo']),
+['AT-LC-1','حرارة مقصورة الحمل — High (ص14)','','150','°C','md'],['AT-LC-1','حرارة مقصورة الحمل — Low (ص14)','10','','°C','lo'],
+['AT-AC-1','حرارة مقصورة الملحقات — H (ص14)','','65','°C','md'],['AT-AC-1','حرارة مقصورة الملحقات — L (ص14)','10','','°C','lo'],
+['AT-AC-11','حرارة مقصورة الغاز — H (ص15)','','65','°C','md'],['AT-AC-11','حرارة مقصورة الغاز — L (ص15)','10','','°C','lo'],
+/* من شاشات HMI لمحطة شط البصرة */
+...['LT-TH-1','LT-TH-2','LT-TH-3'].map(t=>[t,'حرارة زيت التزييت Header — Alarm (شاشة Lube Oil)','','76.6','°C','md']),
+...['LT-TH-1','LT-TH-2','LT-TH-3'].map(t=>[t,'حرارة زيت التزييت Header — Trip (شاشة Lube Oil)','','82.2','°C','hi']),
+...[...['BB1','BB2','BB3','BB4','BB5','BB9','BB10','BB11','BB12'],'39V-1A','39V-1B','39V-2A','39V-3A','39V-3B','39V-4A','39V-4B','39V-5A','39V-5B'].map(t=>[t,'اهتزاز Seismic — Alarm (شاشة Vibration Seismic)','','12.5','mm/s','md']),
+...[...['BB1','BB2','BB3','BB4','BB5','BB9','BB10','BB11','BB12'],'39V-1A','39V-1B','39V-2A','39V-3A','39V-3B','39V-4A','39V-4B','39V-5A','39V-5B'].map(t=>[t,'اهتزاز Seismic — Trip (شاشة Vibration Seismic)','','18','mm/s','hi']),
+...['DT-GSF-31','DT-GSF-32','DT-GSF-33'].map(t=>[t,'حرارة الجزء الثابت للمولد — Alarm (حد عائلة DT-GSF ص45)','','129','°C','md']),
+...['DT-GSA-34','DT-GSA-35','DT-GSA-36'].map(t=>[t,'حرارة الجزء الثابت للمولد — Alarm (حد عائلة DT-GSA ص45)','','129','°C','md']),
+/* Fin Fan Coolers — ص26 */
+['WT-WCD-1','حرارة ماء التبريد بعد المبرّدات — Very High (ص26)','','52.2','°C','md'],['WT-WCD-1','حرارة ماء التبريد — Out of limits (ص26)','','80','°C','hi']];
+$('#limPreset').onclick=()=>{const has=new Set(limits.map(l=>normTag(l.tag)+'|'+l.min+'|'+l.max));let n=0;
+  PRESET.forEach(([tag,desc,min,max,unit,severity,run])=>{const k=normTag(tag)+'|'+min+'|'+max;if(!has.has(k)){limits.push(run?{tag,desc,min,max,unit,severity,run:true}:{tag,desc,min,max,unit,severity});has.add(k);n++}});
+  limDirty=true;renderLim();toast('أُضيف '+n+' حداً من الملزمة — اضغط «حفظ الحدود»')};
+$('#limClear').onclick=e=>{if(!e.target.dataset.sure){e.target.dataset.sure=1;e.target.textContent='تأكيد المسح؟';return}e.target.dataset.sure='';e.target.textContent='مسح الكل';limits=[];limDirty=true;renderLim()};
+renderLim();
+
+/* ---------- images ---------- */
+function loadImg(file){return new Promise((res,rej)=>{const img=new Image();img.onload=()=>res(img);img.onerror=rej;img.src=URL.createObjectURL(file)})}
+function toCanvas(img,max){const k=Math.min(1,max/Math.max(img.width,img.height));let cur=img,cw=img.width,ch=img.height;const tw=Math.round(img.width*k),th=Math.round(img.height*k);
+  /* step down by halves for a clean downscale (less moire) */
+  while(cw/2>tw){const t=document.createElement('canvas');t.width=Math.round(cw/2);t.height=Math.round(ch/2);const x=t.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(cur,0,0,t.width,t.height);cur=t;cw=t.width;ch=t.height}
+  const c=document.createElement('canvas');c.width=tw;c.height=th;const x=c.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(cur,0,0,tw,th);return c}
+
+/* alarm colour regions: red and yellow/amber blobs */
+function colorRegions(src){
+  const W=Math.min(400,src.width),k=src.width/W,H=Math.round(src.height/k);
+  const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(src,0,0,W,H);
+  const d=x.getImageData(0,0,W,H).data,cls=new Uint8Array(W*H);
+  for(let i=0;i<W*H;i++){const r=d[i*4],g=d[i*4+1],b=d[i*4+2];const mx=Math.max(r,g,b),mn=Math.min(r,g,b);if(mx<110||mx-mn<70)continue;
+    if(r===mx&&g<r*0.55&&b<r*0.55)cls[i]=1;else if(r>150&&g>120&&(b<Math.min(r,g)*0.55&&Math.abs(r-g)<90||b<Math.min(r,g)*0.72&&Math.abs(r-g)<35))cls[i]=2}
+  const seen=new Uint8Array(W*H),out=[];
+  for(let i=0;i<W*H;i++){if(!cls[i]||seen[i])continue;const t=cls[i];let st=[i],n=0,x0=W,y0=H,x1=0,y1=0;seen[i]=1;
+    while(st.length){const p=st.pop(),px=p%W,py=(p/W)|0;n++;if(px<x0)x0=px;if(px>x1)x1=px;if(py<y0)y0=py;if(py>y1)y1=py;
+      for(const q of [p-1,p+1,p-W,p+W]){if(q<0||q>=W*H||seen[q]||cls[q]!==t)continue;if((q===p-1&&px===0)||(q===p+1&&px===W-1))continue;seen[q]=1;st.push(q)}}
+    const area=(x1-x0+1)*(y1-y0+1);if(n<6||area>W*H*0.2)continue;out.push({t:t===1?'red':'yel',x0:x0*k,y0:y0*k,x1:(x1+1)*k,y1:(y1+1)*k})}
+  /* merge blobs of the same colour that sit on one line close together (letters of coloured text) */
+  let merged=true;while(merged){merged=false;for(let i=0;i<out.length&&!merged;i++)for(let j=i+1;j<out.length;j++){const a=out[i],b=out[j];if(a.t!==b.t)continue;const h=Math.max(a.y1-a.y0,b.y1-b.y0);const vy=Math.min(a.y1,b.y1)-Math.max(a.y0,b.y0);const gx=Math.max(a.x0,b.x0)-Math.min(a.x1,b.x1);
+      if(vy>h*0.4&&gx<h*1.2){a.x0=Math.min(a.x0,b.x0);a.y0=Math.min(a.y0,b.y0);a.x1=Math.max(a.x1,b.x1);a.y1=Math.max(a.y1,b.y1);out.splice(j,1);merged=true;break}}}
+  return out.filter(r=>(r.x1-r.x0)*(r.y1-r.y0)>=36*k*k)}
+
+/* OCR preprocessing: luminance, optional inversion (white-on-dark / white-on-red), contrast stretch, upscale small images */
+function prep(src,inv){const s=src.width<1400?Math.min(2,1600/src.width):1;const c=document.createElement('canvas');c.width=Math.round(src.width*s);c.height=Math.round(src.height*s);const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingQuality='high';x.filter='blur(0.8px)';x.drawImage(src,0,0,c.width,c.height);x.filter='none';
+  const im=x.getImageData(0,0,c.width,c.height),d=im.data,n=d.length/4;let lo=255,hi=0;
+  for(let i=0;i<n;i++){let v=0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2];if(inv)v=255-v;d[i*4]=v;if(i%5===0){if(v<lo)lo=v;if(v>hi)hi=v}}
+  const sc=255/Math.max(40,hi-lo);for(let i=0;i<n;i++){let v=(d[i*4]-lo)*sc;v=v<0?0:v>255?255:v;d[i*4]=d[i*4+1]=d[i*4+2]=v}
+  x.putImageData(im,0,0);return {c,s}}
+
+/* crop a box, binarise with Otsu, force dark text on white, upscale for OCR */
+function cropBin(src,r,minH){const pad=Math.max(3,(r.y1-r.y0)*0.15);const x0=Math.max(0,r.x0-pad),y0=Math.max(0,r.y0-pad),x1=Math.min(src.width,r.x1+pad),y1=Math.min(src.height,r.y1+pad);const w=x1-x0,h=y1-y0;if(w<6||h<6)return null;
+  const k=Math.min(4,Math.max(1,minH/h));const c=document.createElement('canvas');c.width=Math.round(w*k);c.height=Math.round(h*k);const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingQuality='high';x.drawImage(src,x0,y0,w,h,0,0,c.width,c.height);
+  const im=x.getImageData(0,0,c.width,c.height),d=im.data,n=d.length/4,hist=new Array(256).fill(0),L=new Uint8Array(n);
+  for(let i=0;i<n;i++){const v=Math.round(0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2]);L[i]=v;hist[v]++}
+  let sum=0;for(let i=0;i<256;i++)sum+=i*hist[i];let sb=0,wb=0,best=0,th=128;for(let t=0;t<256;t++){wb+=hist[t];if(!wb)continue;const wf=n-wb;if(!wf)break;sb+=t*hist[t];const mb=sb/wb,mf=(sum-sb)/wf,v=wb*wf*(mb-mf)**2;if(v>best){best=v;th=t}}
+  let dark=0;for(let i=0;i<n;i++)if(L[i]<=th)dark++;const flip=dark>n/2;
+  for(let i=0;i<n;i++){let b=L[i]<=th;if(flip)b=!b;d[i*4]=d[i*4+1]=d[i*4+2]=b?0:255}
+  x.putImageData(im,0,0);
+  const out=document.createElement('canvas');out.width=c.width+40;out.height=c.height+40;const o=out.getContext('2d');o.fillStyle='#fff';o.fillRect(0,0,out.width,out.height);o.drawImage(c,20,20);
+  return {c:out,x0,y0,k,off:20}}
+async function cropOCR(w,src,regions){const words=[];let page='',bandText='';
+  await w.setParameters({tessedit_pageseg_mode:'7'});
+  try{for(const r of regions.slice(0,25)){const cb=cropBin(src,r,64);if(!cb)continue;const {data}=await w.recognize(cb.c);
+      (data.words||[]).forEach(q=>words.push({text:q.text,confidence:q.confidence,bbox:{x0:cb.x0+(q.bbox.x0-cb.off)/cb.k,y0:cb.y0+(q.bbox.y0-cb.off)/cb.k,x1:cb.x0+(q.bbox.x1-cb.off)/cb.k,y1:cb.y0+(q.bbox.y1-cb.off)/cb.k}}))}
+    await w.setParameters({tessedit_pageseg_mode:'6'});
+    const band=cropBin(src,{x0:0,y0:0,x1:Math.round(src.width*0.85),y1:Math.round(src.height*0.11)},48);
+    if(band){const {data}=await w.recognize(band.c);bandText=(data.text||'');page=(data.lines||[]).map(l=>clean(l.text)).filter(t=>/[A-Za-z]{3,}/.test(t)).sort((a,b)=>b.length-a.length)[0]||''}
+  }finally{await w.setParameters({tessedit_pageseg_mode:'11'})}
+  return {pass:{data:{words},s:1},page,band:bandText}}
+
+/* detect the white value boxes of the HMI (bright, unsaturated rectangles brighter than their surroundings) */
+function valueBoxes(src,zone){
+  const W=Math.min(1100,src.width),k=src.width/W,H=Math.round(src.height/k);
+  const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(src,0,0,W,H);
+  const d=x.getImageData(0,0,W,H).data,n=W*H,L=new Float32Array(n),S=new Uint8Array(n);
+  for(let i=0;i<n;i++){const r=d[i*4],g=d[i*4+1],b=d[i*4+2];L[i]=0.299*r+0.587*g+0.114*b;S[i]=Math.max(r,g,b)-Math.min(r,g,b)}
+  /* light blur against moire */
+  const B=new Float32Array(n);for(let y=1;y<H-1;y++)for(let xx=1;xx<W-1;xx++){const i=y*W+xx;B[i]=(L[i]*4+L[i-1]+L[i+1]+L[i-W]+L[i+W])/8}
+  /* local mean with integral image */
+  const I=new Float64Array((W+1)*(H+1));for(let y=0;y<H;y++){let row=0;for(let xx=0;xx<W;xx++){row+=B[y*W+xx];I[(y+1)*(W+1)+xx+1]=I[y*(W+1)+xx+1]+row}}
+  const R=22,mask=new Uint8Array(n);
+  for(let y=0;y<H;y++)for(let xx=0;xx<W;xx++){const x0=Math.max(0,xx-R),x1=Math.min(W,xx+R+1),y0=Math.max(0,y-R),y1=Math.min(H,y+R+1);const m=(I[y1*(W+1)+x1]-I[y0*(W+1)+x1]-I[y1*(W+1)+x0]+I[y0*(W+1)+x0])/((x1-x0)*(y1-y0));const i=y*W+xx;
+    if(B[i]>m+6&&B[i]>150&&S[i]<45)mask[i]=1}
+  const seen=new Uint8Array(n),out=[];
+  for(let i=0;i<n;i++){if(!mask[i]||seen[i])continue;let st=[i],cnt=0,x0=W,y0=H,x1=0,y1=0;seen[i]=1;
+    while(st.length){const p=st.pop(),px=p%W,py=(p/W)|0;cnt++;if(px<x0)x0=px;if(px>x1)x1=px;if(py<y0)y0=py;if(py>y1)y1=py;
+      if(px>0&&mask[p-1]&&!seen[p-1]){seen[p-1]=1;st.push(p-1)}if(px<W-1&&mask[p+1]&&!seen[p+1]){seen[p+1]=1;st.push(p+1)}if(py>0&&mask[p-W]&&!seen[p-W]){seen[p-W]=1;st.push(p-W)}if(py<H-1&&mask[p+W]&&!seen[p+W]){seen[p+W]=1;st.push(p+W)}}
+    const w=x1-x0+1,h=y1-y0+1;if(h<H*0.011||h>H*0.06||w<h*1.2||w>h*9)continue;if(cnt/(w*h)<0.5)continue;
+    const b={x0:x0*k,y0:y0*k,x1:(x1+1)*k,y1:(y1+1)*k,box:true};if((b.y0+b.y1)/2>zone||b.y1<src.height*0.06)continue;out.push(b)}
+  return out}
+/* read the number inside one box: digits-only OCR on a cleaned, enlarged crop */
+function boxCrop(src,b,wide,alt){const bh=b.y1-b.y0,ins=b.box?Math.max(1,bh*0.08):0,ext=wide?bh*0.8:0;const x0=Math.max(0,b.x0+ins-ext),y0=Math.max(0,b.y0+ins),w=Math.min(src.width-x0,b.x1-b.x0-2*ins+ext),h=Math.min(src.height-y0,bh-2*ins);if(w<4||h<4)return null;
+  const k=Math.min(5,80/h);const c=document.createElement('canvas');c.width=Math.round(w*k);c.height=Math.round(h*k);const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingQuality='high';x.filter='blur('+(alt?Math.max(0.3,k*0.08):Math.max(0.5,k*0.18))+'px)';x.drawImage(src,x0,y0,w,h,0,0,c.width,c.height);x.filter='none';
+  const im=x.getImageData(0,0,c.width,c.height),d=im.data,N=d.length/4,hist=new Array(256).fill(0),L=new Uint8Array(N);
+  for(let i=0;i<N;i++){const v=Math.round(0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2]);L[i]=v;hist[v]++}
+  let sum=0;for(let i=0;i<256;i++)sum+=i*hist[i];let sb=0,wb=0,best=0,th=128;for(let t=0;t<256;t++){wb+=hist[t];if(!wb)continue;const wf=N-wb;if(!wf)break;sb+=t*hist[t];const v=wb*wf*(sb/wb-(sum-sb)/wf)**2;if(v>best){best=v;th=t}}
+  let dark=0;for(let i=0;i<N;i++)if(L[i]<=th)dark++;const flip=dark>N/2;
+  for(let i=0;i<N;i++){let bl=L[i]<=th;if(flip)bl=!bl;d[i*4]=d[i*4+1]=d[i*4+2]=bl?0:255}
+  x.putImageData(im,0,0);const o=document.createElement('canvas');o.width=c.width+40;o.height=c.height+30;const ox=o.getContext('2d');ox.fillStyle='#fff';ox.fillRect(0,0,o.width,o.height);ox.drawImage(c,20,15);return o}
+async function readBoxes(w,src,boxes,st){
+  const rd=async(b,wide,alt)=>{const cv=boxCrop(src,b,wide,alt);if(!cv)return null;const {data}=await w.recognize(cv);let t=(data.text||'').replace(/\s/g,'').replace(/^[.]+|[.]+$/g,'');const m=t.match(/-?\d+(?:\.\d+)?/);if(!m)return null;let v=m[0];if(/^-?0\d/.test(v)&&!v.includes('.'))v=v.replace(/^(-?)0+(?=\d)/,'$1');return {v,c:Math.round(data.confidence||0)}};
+  const dig=x=>(x||'').replace(/[^0-9]/g,'');
+  await w.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:'-0123456789.'});
+  try{for(let i=0;i<boxes.length;i++){const b=boxes[i];if(st)st('قراءة القيم '+(i+1)+'/'+boxes.length);
+      let r=await rd(b,false);
+      /* value wider than its box (e.g. -2164.4): read again with room on the left */
+      if(b.box&&(!r||(!r.v.includes('.')&&dig(r.v).length>=3)||(b.gv&&dig(b.gv)!==dig(r.v)))){const r2=await rd(b,true);if(r2&&(!r||(dig(r2.v).includes(dig(r.v))&&/[-.]/.test(r2.v))))r=r2}
+      if(r&&r.v.startsWith('-')&&r.v.replace(/[^0-9]/g,'').length<=3&&!(b.gv||'').startsWith('-'))r.v=r.v.slice(1);
+      if(r){b.v=r.v;b.conf=r.c}}}
+  finally{await w.setParameters({tessedit_pageseg_mode:'11',tessedit_char_whitelist:''})}}
+
+/* tiled OCR: split the screen into overlapping tiles, enlarge each, soften moire, read */
+async function tiledOCR(w,src,zone,st){const H=Math.min(src.height,Math.round(zone)),W=src.width,nx=W>1500?3:2,ny=H>900?2:1,words=[];let n=0;
+  for(let iy=0;iy<ny;iy++)for(let ix=0;ix<nx;ix++){n++;const x0=Math.max(0,Math.round(W*ix/nx-W*0.04)),x1=Math.min(W,Math.round(W*(ix+1)/nx+W*0.04)),y0=Math.max(0,Math.round(H*iy/ny-H*0.05)),y1=Math.min(H,Math.round(H*(iy+1)/ny+H*0.05));
+    const tw=x1-x0,th=y1-y0,sc=Math.max(1,Math.min(2.6,1800/tw));const c=document.createElement('canvas');c.width=Math.round(tw*sc);c.height=Math.round(th*sc);const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingQuality='high';x.filter='blur('+(sc*0.55).toFixed(2)+'px)';x.drawImage(src,x0,y0,tw,th,0,0,c.width,c.height);x.filter='none';
+    const im=x.getImageData(0,0,c.width,c.height),d=im.data,N=d.length/4;let lo=255,hi=0;for(let i=0;i<N;i++){const v=0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2];d[i*4]=v;if(i%7===0){if(v<lo)lo=v;if(v>hi)hi=v}}
+    const k=255/Math.max(40,hi-lo);for(let i=0;i<N;i++){let v=(d[i*4]-lo)*k;v=v<0?0:v>255?255:v;d[i*4]=d[i*4+1]=d[i*4+2]=v}x.putImageData(im,0,0);
+    curLog=m=>{if(m.status==='recognizing text'&&st)st('قراءة الشاشة — جزء '+n+' من '+(nx*ny)+'… '+Math.round(m.progress*100)+'%')};
+    const {data}=await w.recognize(c);curLog=null;
+    (data.words||[]).forEach(q=>words.push({text:q.text,confidence:q.confidence,bbox:{x0:x0+q.bbox.x0/sc,y0:y0+q.bbox.y0/sc,x1:x0+q.bbox.x1/sc,y1:y0+q.bbox.y1/sc}}))}
+  return {data:{words},s:1}}
+
+/* small picture of one reading, with room for its label */
+function cropImg(src,b){if(!b)return '';const h=Math.max(8,b[3]-b[1]);const x0=Math.max(0,b[0]-h*3.5),x1=Math.min(src.width,b[2]+h*2),y0=Math.max(0,b[1]-h*0.7),y1=Math.min(src.height,b[3]+h*0.7);if(x1-x0<4||y1-y0<4)return '';
+  const k=Math.min(3,44/(y1-y0));const c=document.createElement('canvas');c.width=Math.round((x1-x0)*k);c.height=Math.round((y1-y0)*k);c.getContext('2d').drawImage(src,x0,y0,x1-x0,y1-y0,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.72)}
+/* read the number the user tapped on */
+async function tapRead(src,nx,ny,pg){const w=await getWorker();const W=src.width,H=src.height,cx=nx*W,cy=ny*H;let best=null,ws=[],bws=null;
+  for(const [rw,rh,psm] of [[0.07,0.035,'11'],[0.085,0.04,'6'],[0.13,0.06,'11']]){
+    const x0=Math.max(0,cx-W*rw/2),y0=Math.max(0,cy-H*rh/2),x1=Math.min(W,cx+W*rw/2),y1=Math.min(H,cy+H*rh/2);const sc=Math.min(5,1200/(x1-x0));
+    const c=document.createElement('canvas');c.width=Math.round((x1-x0)*sc);c.height=Math.round((y1-y0)*sc);const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';x.filter='blur('+(sc*0.12).toFixed(2)+'px)';x.drawImage(src,x0,y0,x1-x0,y1-y0,0,0,c.width,c.height);x.filter='none';
+    const im=x.getImageData(0,0,c.width,c.height),d=im.data;let lo=255,hi=0;for(let i=0;i<d.length;i+=4){const v=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];d[i]=v;if(v<lo)lo=v;if(v>hi)hi=v}const k=255/Math.max(30,hi-lo);for(let i=0;i<d.length;i+=4){const v=(d[i]-lo)*k;d[i]=d[i+1]=d[i+2]=v<0?0:v>255?255:v}x.putImageData(im,0,0);
+    await w.setParameters({tessedit_pageseg_mode:psm});let data;try{({data}=await w.recognize(c))}finally{await w.setParameters({tessedit_pageseg_mode:'11'})}
+    ws=(data.words||[]).map(q=>({t:clean(q.text),c:q.confidence,x0:x0+q.bbox.x0/sc,y0:y0+q.bbox.y0/sc,x1:x0+q.bbox.x1/sc,y1:y0+q.bbox.y1/sc})).filter(q=>q.t);
+    ws.forEach(q=>{q.t=q.t.replace(/^[(\[{|]+|[)\]}:;,|]+$/g,'');q.cx=(q.x0+q.x1)/2;q.cy=(q.y0+q.y1)/2;const m=q.t.match(NUM_RE);q.num=m&&(!m[2]||UNIT_RE.test(m[2]))?m:null});
+    const n=ws.filter(q=>q.num).sort((a,b)=>Math.hypot(a.cx-cx,a.cy-cy)-Math.hypot(b.cx-cx,b.cy-cy))[0];
+    if(n&&Math.hypot(n.cx-cx,n.cy-cy)<W*rw*0.45){best=n;bws=ws;break}if(n&&!best){best=n;bws=ws}}
+  ws=bws||ws;
+  const n=best;if(!n)return null;const h=n.y1-n.y0;
+  /* "2164" + "4" split around a lost decimal point */
+  {const lf=ws.find(q=>q!==n&&q.num&&/^[-−–—~]?\d{2,5}$/.test(q.t)&&/^\d$/.test(n.t)&&Math.abs(q.cy-n.cy)<h*0.6&&q.x1<=n.x0+2&&n.x0-q.x1<h*0.9);if(lf){n.t=lf.t+'.'+n.t;n.num=n.t.match(NUM_RE)||n.num;n.x0=lf.x0;n.cx=(n.x0+n.x1)/2}}
+  {const nx2=ws.find(q=>q!==n&&q.num&&/^\d$/.test(q.t)&&Math.abs(q.cy-n.cy)<h*0.6&&q.x0>=n.x1-2&&q.x0-n.x1<h*0.9);if(nx2&&!n.t.includes('.')){n.t=n.t+'.'+nx2.t;n.num=n.t.match(NUM_RE)||n.num;n.x1=nx2.x1}}
+  const b={x0:n.x0-h*0.8,y0:n.y0-h*0.35,x1:n.x1+h*1.2,y1:n.y1+h*0.35,gv:n.num[1].replace(/^[−–—~]/,'-').replace(',','.')};
+  await readBoxes(w,src,[b]);const value=mergeVal(b.gv,b.v,b.conf);
+  const lab=ws.filter(q=>!q.num&&q.t.length>1&&/[A-Za-z]/.test(q.t)&&Math.hypot(q.cx-n.cx,q.cy-n.cy)<h*9).sort((a,b)=>Math.hypot(a.cx-n.cx,a.cy-n.cy)-Math.hypot(b.cx-n.cx,b.cy-n.cy));
+  let tag='';if(pg&&pg.tags&&pg.tags.length){const T=pg.tags.map(t=>[t,normTag(t).replace(/I/g,'1')]);for(const q of lab){const k=normTag(q.t).replace(/I/g,'1');if(k.length<2)continue;let bt=null,bd=9;for(const [t,nn] of T){const d=lev(k,nn);if(d<bd){bd=d;bt=t}}if(bt&&bd<=2){tag=bt;break}}}
+  const tw=tag?null:(lab.find(q=>TAG_RE.test(q.t.toUpperCase()))||lab.find(q=>TAG2_RE.test(q.t)));const u=ws.find(q=>UNIT_RE.test(q.t)&&q.x0>=n.x1-h&&q.x0-n.x1<h*4&&Math.abs(q.cy-n.cy)<h);
+  const v2=n.t.includes('.')&&!value.includes('.')&&value.replace(/^-/,'')===n.num[1].replace(/^[−–—~-]/,'').replace('.','')?(value.startsWith('-')?'-':'')+n.num[1].replace(/^[−–—~-]/,''):value;
+  const r={tag:tag||(tw?tw.t:''),desc:tag||tw?'':(lab[0]?lab[0].t:''),value:v2,unit:u?u.t:'',color:'',conf:b.conf||0,st:'',lim:'',note:'',box:[n.x0,n.y0,n.x1,n.y1]};return r}
+
+/* ---------- PaddleOCR (PP-OCRv4) in the browser, via onnxruntime-web ---------- */
+let ppP=null;
+function ppLoad(){if(ppP)return ppP;ppP=(async()=>{if(!window.ort)throw new Error('ort missing');const base=new URL('pp/',location.href).href;
+  ort.env.wasm.numThreads=1;ort.env.wasm.proxy=false;ort.env.wasm.wasmPaths=base;
+  const b64=async f=>{const r=await fetch(base+f);if(!r.ok)throw new Error(f+' '+r.status);const t=(await r.text()).replace(/\s/g,'');const s=atob(t);const a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a};
+  const kt=await (await fetch(base+'keys.txt')).text();const keys=kt.split('\n').map(l=>l.replace(/\r$/,''));if(keys[keys.length-1]==='')keys.pop();keys.push(' ');
+  const opt={executionProviders:['wasm'],graphOptimizationLevel:'all'};
+  const det=await ort.InferenceSession.create(await b64('det.b64.txt'),opt);const rec=await ort.InferenceSession.create(await b64('rec.b64.txt'),opt);
+  return {det,rec,keys}})().catch(e=>{ppP=null;throw e});return ppP}
+/* text-line detection: returns boxes in source pixels */
+async function ppDetect(pp,src,rect,side){const sx0=rect?rect[0]:0,sy0=rect?rect[1]:0,sw=rect?rect[2]-rect[0]:src.width,sh=rect?rect[3]-rect[1]:src.height;
+  const s=side/Math.max(sw,sh),w=Math.max(32,Math.round(sw*s/32)*32),h=Math.max(32,Math.round(sh*s/32)*32);
+  const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingQuality='high';x.drawImage(src,sx0,sy0,sw,sh,0,0,w,h);
+  const d=x.getImageData(0,0,w,h).data,n=w*h,f=new Float32Array(3*n),M=[0.485,0.456,0.406],S=[0.229,0.224,0.225];
+  for(let i=0;i<n;i++)for(let k=0;k<3;k++)f[k*n+i]=(d[i*4+k]/255-M[k])/S[k];
+  const out=await pp.det.run({[pp.det.inputNames[0]]:new ort.Tensor('float32',f,[1,3,h,w])});const pm=out[pp.det.outputNames[0]].data;
+  const m=new Uint8Array(n);for(let i=0;i<n;i++)m[i]=pm[i]>0.3?1:0;const seen=new Uint8Array(n),boxes=[];
+  for(let i=0;i<n;i++){if(!m[i]||seen[i])continue;let st=[i],x0=w,y0=h,x1=0,y1=0,cnt=0,ps=0;seen[i]=1;
+    while(st.length){const q=st.pop(),qx=q%w,qy=(q/w)|0;cnt++;ps+=pm[q];if(qx<x0)x0=qx;if(qx>x1)x1=qx;if(qy<y0)y0=qy;if(qy>y1)y1=qy;
+      if(qx>0&&m[q-1]&&!seen[q-1]){seen[q-1]=1;st.push(q-1)}if(qx<w-1&&m[q+1]&&!seen[q+1]){seen[q+1]=1;st.push(q+1)}if(qy>0&&m[q-w]&&!seen[q-w]){seen[q-w]=1;st.push(q-w)}if(qy<h-1&&m[q+w]&&!seen[q+w]){seen[q+w]=1;st.push(q+w)}}
+    if(y1-y0<2||x1-x0<2||ps/cnt<0.5)continue;const ex=(y1-y0+1)*0.6;
+    boxes.push([sx0+(x0-ex)/w*sw,sy0+(y0-ex)/h*sh,sx0+(x1+1+ex)/w*sw,sy0+(y1+1+ex)/h*sh].map((v,j)=>Math.max(0,Math.min(j%2?src.height:src.width,v))))}
+  return boxes}
+/* one text line -> string */
+async function ppRec(pp,src,b){const bw=b[2]-b[0],bh=b[3]-b[1];if(bw<3||bh<3)return {t:'',p:0};const W=Math.max(16,Math.min(960,Math.round(48*bw/bh)));
+  const c=document.createElement('canvas');c.width=W;c.height=48;const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingQuality='high';x.drawImage(src,b[0],b[1],bw,bh,0,0,W,48);
+  const d=x.getImageData(0,0,W,48).data,n=W*48,f=new Float32Array(3*n);for(let i=0;i<n;i++)for(let k=0;k<3;k++)f[k*n+i]=(d[i*4+k]/255-0.5)/0.5;
+  const out=await pp.rec.run({[pp.rec.inputNames[0]]:new ort.Tensor('float32',f,[1,3,48,W])});const o=out[pp.rec.outputNames[0]];const [,T,C]=o.dims,a=o.data;
+  let res='',last=-1,ps=0,pn=0;for(let t=0;t<T;t++){let bi=0,bv=-1;for(let k=0;k<C;k++){const v=a[t*C+k];if(v>bv){bv=v;bi=k}}if(bi!==last&&bi!==0){res+=pp.keys[bi-1]||'';ps+=bv;pn++}last=bi}
+  return {t:res,p:pn?ps/pn:0}}
+const ppNorm=t=>String(t).replace(/℃/g,'°C').replace(/℉/g,'°F').replace(/[—–−]/g,'-').replace(/[，]/g,',').replace(/[（]/g,'(').replace(/[）]/g,')').replace(/\*C\b/g,'°C');
+/* read the whole screen; split lines into words with positions */
+async function ppReadPage(pp,src,zone,st){if(st)st('تحديد النصوص بالشاشة…');const H=Math.min(src.height,zone),boxes=(await ppDetect(pp,src,[0,0,src.width,H],1600)).filter(b=>(b[1]+b[3])/2<H);
+  const words=[];let k=0;for(const b of boxes){k++;if(st&&k%10===0)st('قراءة النصوص '+k+'/'+boxes.length);const r=await ppRec(pp,src,b);if(!r.t||r.p<0.5)continue;
+    const t=ppNorm(r.t).trim();const parts=t.split(/\s+/).filter(Boolean);const L=t.length||1;let pos=0;
+    for(const pt of parts){const i0=t.indexOf(pt,pos);pos=i0+pt.length;const x0=b[0]+(b[2]-b[0])*i0/L,x1=b[0]+(b[2]-b[0])*(i0+pt.length)/L;const pad=(b[3]-b[1])*0.18;
+      words.push({text:pt,confidence:Math.round(r.p*100),bbox:{x0,y0:b[1]+pad,x1,y1:b[3]-pad}})}}
+  return {data:{words},s:1,boxes}}
+/* read the number nearest to a point (tap, template) */
+async function ppTap(pp,src,nx,ny,pg){const W=src.width,H=src.height,cx=nx*W,cy=ny*H;const rw=W*0.14,rh=H*0.08;const rect=[Math.max(0,cx-rw/2),Math.max(0,cy-rh/2),Math.min(W,cx+rw/2),Math.min(H,cy+rh/2)];
+  const boxes=await ppDetect(pp,src,rect,640);const ws=[];for(const b of boxes){const r=await ppRec(pp,src,b);if(!r.t||r.p<0.45)continue;const t=ppNorm(r.t).trim();ws.push({t,b,cx:(b[0]+b[2])/2,cy:(b[1]+b[3])/2})}
+  const nums=ws.map(q=>{const m=q.t.match(/^([-+]?\d+(?:[.,]\d+)?)\s*(°?[CF]|bar|%|mm\/s|mmH2O|kg\/s|rpm|MW|Amps)?/i);return m?{...q,v:m[1].replace(',','.'),u:m[2]||''}:null}).filter(Boolean);
+  const n=nums.sort((a,b)=>Math.hypot(a.cx-cx,a.cy-cy)-Math.hypot(b.cx-cx,b.cy-cy))[0];if(!n)return null;
+  const lab=ws.filter(q=>q!==n&&/[A-Za-z]/.test(q.t)).sort((a,b)=>Math.hypot(a.cx-n.cx,a.cy-n.cy)-Math.hypot(b.cx-n.cx,b.cy-n.cy));
+  let tag='';if(pg&&pg.tags){const T=[...pg.tags,...(pg.sw||[])].map(t=>[t,normTag(t).replace(/I/g,'1')]);for(const q of lab.slice(0,4)){const k=normTag(q.t).replace(/I/g,'1');if(k.length<2)continue;let bt=null,bd=9;for(const [t,nn] of T){const d=Math.min(lev(k,nn),nn.endsWith(k)&&k.length>=3?0:9);if(d<bd){bd=d;bt=t}}if(bt&&bd<=2){tag=bt;break}}}
+  return {tag,desc:tag?'':(lab[0]?lab[0].t:''),value:n.v,unit:n.u||'',color:'',conf:90,st:'',lim:'',note:'',box:n.b}}
+
+let wk=null,wkP=null;
+function getWorker(onp){if(wkP)return wkP;const base=new URL('ocr/',location.href).href;
+  const src=`const B=${JSON.stringify(base)};const F=self.fetch.bind(self);self.fetch=async(u,o)=>{u=String(u);if(/eng\\.traineddata/.test(u)){const r=await F(B+'eng.b64.txt');if(!r.ok)throw new Error('lang '+r.status);const t=(await r.text()).replace(/\\s/g,'');const s=atob(t);const a=new Uint8Array(s.length);for(let i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return new Response(a)}return F(u,o)};importScripts(B+'worker.min.js');`;
+  const wurl=URL.createObjectURL(new Blob([src],{type:'application/javascript'}));
+  wkP=Tesseract.createWorker('eng',1,{workerPath:wurl,workerBlobURL:false,corePath:base,langPath:base.replace(/\/$/,''),cacheMethod:'none',gzip:true,logger:m=>{if(curLog)curLog(m)},errorHandler:e=>console.warn(e)})
+    .then(async w=>{await w.setParameters({tessedit_pageseg_mode:'11',preserve_interword_spaces:'1'});wk=w;return w})
+    .catch(e=>{wkP=null;throw e});return wkP}
+let curLog=null,busy=Promise.resolve();
+
+const UNIT_RE=/^([°º*'o]?F|[°º*'o]?C|DEG[FC]?|DEGF|DEGC|PSI[GAD]?|BAR[GA]?|KPA|MPA|%|PCT|IN|INH2O|IN\.?H2O|INWC|MM|MMH2O|MILS?|MM\/S|IPS|RPM|MW|MVAR|KV|KA|A|AMPS?|HZ|V|PPM|KG\/S|KGIS|KG\/5|LB\/S|M3\/H|MMH20|MMH2O|BARS?|AMPS|MBAR|MM\/5|RPM\.?)$/i;
+const NUM_RE=/^([-+−–—~]?\d+(?:[.,]\d+)?)([A-Za-z%°\/]+)?$/;
+const ALARM_RE=/\b(ALARM|ALM|TRIP|TRIPPED|FAULT|FAIL(ED|URE)?|BAD|DIAG|LOCKOUT|SHUTDOWN|ABNORMAL)\b/i;
+const TAG_RE=/^(?=[A-Z0-9_.\-]*[A-Z])(?=[A-Z0-9_.\-]*\d)[A-Z0-9]+(?:[-_.][A-Z0-9]+)*$/;const TAG2_RE=/^[A-Z]{2,6}\d?$/;
+function clean(t){return String(t||'').replace(/[|“”"'`]/g,'').trim()}
+function mergeWords(passes){const all=[];
+  for(const [pi,{data,s}] of passes.entries())(data.words||[]).forEach(w=>{const t=clean(w.text);if(!t||w.confidence<(TAG_RE.test(t.toUpperCase())?20:40))return;if(pi===0&&w.confidence<55)return;all.push({t,c:w.confidence+(pi===0?100:0),x0:w.bbox.x0/s,y0:w.bbox.y0/s,x1:w.bbox.x1/s,y1:w.bbox.y1/s})});
+  all.sort((a,b)=>b.c-a.c);const keep=[];
+  for(const w of all){const ov=keep.some(k=>{const ix=Math.min(k.x1,w.x1)-Math.max(k.x0,w.x0),iy=Math.min(k.y1,w.y1)-Math.max(k.y0,w.y0);return ix>0&&iy>0&&ix*iy>0.3*Math.min((k.x1-k.x0)*(k.y1-k.y0),(w.x1-w.x0)*(w.y1-w.y0))});if(!ov)keep.push(w)}
+  return keep}
+function prepWords(passes,H,zone){
+  const words=mergeWords(passes).filter(w=>{const cy=(w.y0+w.y1)/2;return cy<zone&&cy>H*0.06});
+  words.forEach(w=>{w.t=w.t.replace(/^[(\[{|]+|[)\]}:;,|]+$/g,'');w.cx=(w.x0+w.x1)/2;w.cy=(w.y0+w.y1)/2;w.h=Math.max(6,w.y1-w.y0);const m=w.t.match(NUM_RE);w.num=m&&(!m[2]||UNIT_RE.test(m[2]))?m:null;if(w.num)w.gv=m[1].replace(/^[−–—~]/,'-').replace(',','.');w.unit=!w.num&&UNIT_RE.test(w.t);w.up=w.t.toUpperCase()});
+  const sameLine=(a,b)=>Math.abs(a.cy-b.cy)<Math.max(a.h,b.h)*0.6;
+  /* a lone dash just left of a number is its minus sign */
+  words.forEach(w=>{if(!w.num||w.gv.startsWith('-'))return;const d=words.find(o=>/^[-−–—~_]+$/.test(o.t)&&sameLine(o,w)&&o.x1<=w.x0+2&&w.x0-o.x1<w.h*0.7);if(d){w.gv='-'+w.gv;w.x0=d.x0;d.dash=true}});
+  /* numbers glued into a label ("BRG 1 METAL", "J2-1") and chart axis ticks are not readings */
+  words.forEach(w=>{if(!w.num||/\./.test(w.gv))return;const l=words.find(o=>o!==w&&!o.num&&sameLine(o,w)&&o.x1<=w.x0+3&&w.x0-o.x1<w.h*0.6&&/[A-Za-z][A-Za-z0-9]*[-_]$|[A-Za-z]\d*$/.test(o.t));if(l&&/^-?\d{1,2}$/.test(w.gv))w.lab=true});
+  words.forEach(w=>{if(!w.num)return;const r=words.filter(o=>o!==w&&sameLine(o,w)&&o.x0>=w.x1-2).sort((a,b)=>a.x0-b.x0)[0];if(r&&!r.num&&!r.unit&&!r.dash&&r.x0-w.x1<w.h*1.0&&/^[A-Za-z]/.test(r.t))w.lab=true});
+  words.forEach(w=>{if(!w.num||w.lab)return;const col=words.filter(o=>o.num&&!o.lab&&!/\./.test(o.gv)&&Math.abs(o.x1-w.x1)<w.h*2.5&&Math.abs(o.cy-w.cy)<w.h*20);if(col.length>=4){const v=[...new Set(col.map(o=>parseFloat(o.gv)))].sort((a,b)=>a-b);if(v.length<4)return;const d=v.slice(1).map((x,i)=>x-v[i]),m=[...d].sort((a,b)=>a-b)[d.length>>1];if(m>0&&d.filter(x=>Math.abs(x-m)<m*0.35||Math.abs(x-2*m)<m*0.35).length>=d.length*0.6)col.forEach(o=>o.axis=true)}});
+  return words}
+/* candidate value locations: every number the general pass saw, plus bright value boxes */
+function candidates(words,vb){const out=[];
+  for(const w of words){if(!w.num||w.lab||w.axis)continue;const b=vb.find(b=>w.cx>b.x0&&w.cx<b.x1&&w.cy>b.y0&&w.cy<b.y1);
+    if(b){if(!b.gv){b.gv=w.gv;b.used=true;out.push(b)}continue}
+    out.push({x0:w.x0-w.h*0.8,y0:w.y0-w.h*0.35,x1:w.x1+w.h*0.3,y1:w.y1+w.h*0.35,gv:w.gv})}
+  for(const b of vb)if(!b.used&&!out.includes(b)&&!words.some(w=>!w.num&&/[A-Za-z]{2}/.test(w.t)&&w.cx>b.x0&&w.cx<b.x1&&w.cy>b.y0&&w.cy<b.y1))out.push(b);
+  return out.slice(0,80)}
+/* merge the general read and the digits-only read of one value */
+function mergeVal(g,d,dc){const dig=x=>(x||'').replace(/[^0-9]/g,'');
+  if(!d)return g||'';if(!g)return d;
+  if(dig(g)===dig(d)){const base=g.includes('.')?g:d.includes('.')?d:g;return ((g.startsWith('-')||d.startsWith('-'))?'-':'')+base.replace(/^-/,'')}
+  if(!g.includes('.')&&!d.includes('.')&&dig(d).length>dig(g).length&&dig(d).includes(dig(g))&&dig(g).length<=2)return d;
+  const neg=(g.startsWith('-')||d.startsWith('-'))&&dig(d).includes(dig(g).slice(0,2));const sg=x=>(neg&&!x.startsWith('-')?'-':'')+x;
+  if(/\.\d+$/.test(g))return sg(g);if(/\.\d+$/.test(d))return sg(d);return sg(dc>=80?d:g)}
+/* displays show a fixed number of decimals: restore a decimal point the reader dropped */
+function fixDecimals(readings){const dec=readings.filter(r=>/^\d+\.\d$/.test(r.value)&&r.box&&parseFloat(r.value)>=1);if(dec.length<3)return readings;
+  readings.forEach(r=>{if(/^-?\d{5,6}$/.test(r.value)){const d=r.value.replace('-',''),t=d.slice(-3,-1)+'.'+d.slice(-1);if(readings.some(o=>o!==r&&o.value===t))r.value=t;else r.value=r.value.slice(0,-1)+'.'+r.value.slice(-1)}});
+  const c=r=>[(r.box[0]+r.box[2])/2,(r.box[1]+r.box[3])/2];
+  readings.forEach(r=>{if(!/^\d{3,4}$/.test(r.value)||!r.box||/%|RPM|PM/i.test(r.unit+r.desc))return;const [x,y]=c(r);
+    const nb=dec.map(o=>{const [ox,oy]=c(o);return {o,d:Math.hypot(ox-x,oy-y)}}).sort((p,q)=>p.d-q.d).slice(0,5).map(z=>Math.abs(parseFloat(z.o.value)));const md=[...nb].sort((p,q)=>p-q)[nb.length>>1];const ok=nb.filter(v=>v>=md/2&&v<=md*2);if(ok.length<2)return;
+    const lo=Math.min(...ok),hi=Math.max(...ok),f=r.value.slice(0,-1)+'.'+r.value.slice(-1),v=Math.abs(parseFloat(f));if(hi/lo<3&&v>=lo*0.8&&v<=hi*1.25)r.value=f});return readings}
+function analyse(words,regions,H,cands){
+  const sameLine=(a,b)=>Math.abs(a.cy-b.cy)<Math.max(a.h,b.h)*0.6;
+  const inC=w=>cands.some(b=>w.cx>b.x0&&w.cx<b.x1&&w.cy>b.y0&&w.cy<b.y1);
+  const lab=words.filter(w=>!w.num&&!w.unit&&!w.dash&&!inC(w)&&w.t.length>1&&/[A-Za-z]/.test(w.t));
+  const lblRg=regions.filter(r=>words.some(w=>!w.num&&/[A-Za-z]{2}/.test(w.t)&&w.cx>r.x0&&w.cx<r.x1&&w.cy>r.y0&&w.cy<r.y1));
+  const colorOf=(cx,cy,pad)=>{const rg=regions.find(r=>!lblRg.includes(r)&&cx>r.x0-pad&&cx<r.x1+pad&&cy>r.y0-pad&&cy<r.y1+pad);return rg?rg.t:''};
+  const readings=[];
+  for(const b of cands){const v=mergeVal(b.gv,b.v,b.conf);if(!/^-?\d+(\.\d+)?$/.test(v)||/^0\d{3}$/.test(v))continue;
+    const h=b.y1-b.y0,cy=(b.y0+b.y1)/2,P={cy,h};
+    const near=lab.map(w=>{let d=Infinity;
+      if(sameLine(w,P)&&w.x1<=b.x0+h*0.3&&b.x0-w.x1<h*8)d=(b.x0-w.x1)*0.6;
+      else if(w.y1<=b.y0+h*0.3&&b.y0-w.y1<h*1.6&&w.x1>b.x0-h*1.5&&w.x0<b.x1+h*1.5)d=(b.y0-w.y1)+Math.abs(w.cx-(b.x0+b.x1)/2)*0.15;
+      else if(w.y0>=b.y1-h*0.3&&w.y0-b.y1<h*1.6&&w.x1>b.x0-h*1.5&&w.x0<b.x1+h*1.5)d=(w.y0-b.y1)+Math.abs(w.cx-(b.x0+b.x1)/2)*0.15+h*0.2;
+      return {w,d}}).filter(o=>o.d<Infinity).sort((p,q)=>p.d-q.d);
+    const tagO=near.find(o=>TAG_RE.test(o.w.up))||near.find(o=>TAG2_RE.test(o.w.t));const tag=tagO?tagO.w.t:'';
+    let desc='';const left=lab.filter(w=>sameLine(w,P)&&w.x1<=b.x0+h*0.3&&b.x0-w.x1<h*14&&(!tagO||w!==tagO.w)).sort((p,q)=>p.x0-q.x0);
+    if(left.length)desc=left.map(w=>w.t).slice(-4).join(' ');else if(!tag&&near[0])desc=near[0].w.t;
+    const u=words.filter(w=>w.unit&&sameLine(w,P)&&w.x0>=b.x1-h*0.5&&w.x0-b.x1<h*3).sort((p,q)=>p.x0-q.x0)[0];
+    readings.push({tag,desc,value:v,unit:u?u.t:'',color:(()=>{const rg=regions.find(r=>!lblRg.includes(r)&&(b.x0+b.x1)/2>r.x0-h*0.2&&(b.x0+b.x1)/2<r.x1+h*0.2&&cy>r.y0-h*0.2&&cy<r.y1+h*0.2&&(r.x1-r.x0)>=(b.x1-b.x0)*0.5&&(r.y1-r.y0)>=h*0.5);return rg?rg.t:''})(),conf:b.conf||0,box:[b.x0,b.y0,b.x1,b.y1]})}
+  fixDecimals(readings);
+  const dg=x=>String(x).replace(/[^0-9]/g,'');
+  for(let i=readings.length-1;i>=0;i--){const r=readings[i];if(!r.tag&&readings.some(o=>o!==r&&o.tag&&(o.value===r.value||(dg(r.value).length>=3&&dg(o.value).length>dg(r.value).length&&dg(o.value).endsWith(dg(r.value))))))readings.splice(i,1)}
+  /* skip set-point captions such as "Header Temp alarm : 76.6" */
+  for(let i=readings.length-1;i>=0;i--)if(/ALARM|TRIP|SETPOINT|LIMIT/i.test(readings[i].desc))readings.splice(i,1);
+  /* description polluted by neighbouring tags/values (e.g. 'BT-J1-1 BT-J2-1 36.2 °C'): drop it, the limits table refills it */
+  readings.forEach(r=>{if(badDesc(r.desc))r.desc=''});
+  const rows=[];[...words].sort((a,b)=>a.cy-b.cy).forEach(w=>{const r=rows.find(r=>sameLine(r[0],w));r?r.push(w):rows.push([w])});
+  const lines=rows.map(r=>({y:r[0].y0,t:r.sort((a,b)=>a.x0-b.x0).map(o=>o.t).join(' ')}));
+  const top=lines.filter(l=>l.y<H*0.18&&/[A-Za-z]{3,}/.test(l.t)).sort((a,b)=>b.t.length-a.t.length);
+  return {readings,page:(top[0]?top[0].t:'').slice(0,60),text:lines.map(l=>l.t).join('\n')}}
+
+/* mark each reading: st = '' normal | hi | md | lo, with the limit and the reason */
+function applyStatus(readings,running){
+  for(const r of readings){r.st='';r.lim='';r.note='';
+    {const v=parseFloat(r.value),isT=/[CF]$/i.test(r.unit)||/^(BT|LT|TT|FT|DT|CT)/i.test(r.tag)||/TEMP/i.test(r.desc);if(!isNaN(v)&&(v<=-999||v>=99999||(isT&&(v<-40||v>1500)))){r.st='hi';r.note='قراءة غير منطقية — حساس أو دائرة قياس عاطلة';continue}}
+    const key=normTag(r.tag||r.desc),v=parseFloat(r.value);
+    const kd=normTag(r.desc);const Ls=limits.filter(l=>{const t=normTag(l.tag);return t&&(t===normTag(r.tag)||(!r.tag&&t===kd))&&!(l.run&&running!==true)});
+    if(Ls.length){const rng=Ls.map(l=>(l.min!==''&&!isNaN(parseFloat(l.min))?'≥'+l.min:'')+(l.max!==''&&!isNaN(parseFloat(l.max))?'≤'+l.max:'')).filter(Boolean);r.lim=[...new Set(rng)].join(' ');
+      if(!r.desc&&Ls[0].desc)r.desc=Ls[0].desc.replace(/ — .*$/,'');if(!r.unit&&Ls[0].unit)r.unit=Ls[0].unit;
+      let best=null;const rank={hi:3,md:2,lo:1};
+      if(!isNaN(v))for(const L of Ls){const mn=parseFloat(L.min),mx=parseFloat(L.max);if((!isNaN(mx)&&v>mx)||(!isNaN(mn)&&v<mn)){if(!best||rank[L.severity||'md']>rank[best.severity||'md'])best=L}}
+      if(best){r.st=best.severity||'md';const mn=parseFloat(best.min),mx=parseFloat(best.max);r.lim=(!isNaN(mx)&&v>mx?'≤'+best.max:'≥'+best.min)+(best.unit?' '+best.unit:'');r.note='خارج الحدود: '+(best.desc||best.tag);continue}}
+    if(r.color&&!/^-?\d{1,2}$/.test(r.value)){r.st=r.color==='red'?'hi':'md';r.note=r.color==='red'?'إنذار أحمر على الشاشة':'تحذير أصفر على الشاشة'}}
+  return readings}
+function outliers(readings){const a=readings.map(r=>Math.abs(parseFloat(r.value))).filter(v=>!isNaN(v)).sort((p,q)=>p-q);if(a.length<5)return readings;const med=a[a.length>>1]||1;
+  readings.forEach(r=>{const v=Math.abs(parseFloat(r.value));if(!r.st&&v>=300&&v>med*10){r.st='hi';r.note='قراءة شاذة جداً مقارنة بباقي الصفحة — تحقق من الحساس'}});return readings}
+function badDesc(d){return !!d&&(/\b[A-Z0-9]{2,4}-[A-Z0-9]{1,4}-\d/i.test(d)||/-?\d+(\.\d+)?\s*°/.test(d))}
+const toFaults=rd=>rd.filter(r=>r.st).map(r=>({tag:r.tag,desc:r.desc,value:r.value+(r.unit?' '+r.unit:''),limit:r.lim||'',severity:r.st,note:r.note||''}));
+
+$('#cam').onchange=e=>{handle([...e.target.files]);e.target.value=''};
+$('#up').onchange=e=>{handle([...e.target.files]);e.target.value=''};
+$('#alt').onchange=e=>{handle([...e.target.files]);e.target.value=''};
+let pending=[];
+function handle(files){for(const f of files)if(f&&(/^image\//.test(f.type)||/\.(jpe?g|png|webp|heic|bmp)$/i.test(f.name)))pending.push({f,u:URL.createObjectURL(f)});renderTray();if(files.length)toast('أُضيفت '+files.length+' صورة — المجموع '+pending.length)}
+function renderTray(){$('#trayCard').style.display=pending.length?'':'none';$('#trayN').textContent='('+pending.length+')';$('#runAll').textContent='تحليل الكل ('+pending.length+')';
+  $('#tray').innerHTML=pending.map((p,i)=>`<div><img alt="صورة ${i+1}" src="${esc(p.u)}"><button data-rm="${i}" aria-label="إزالة">×</button></div>`).join('')}
+$('#tray').addEventListener('click',e=>{const i=e.target.dataset.rm;if(i===undefined)return;URL.revokeObjectURL(pending[+i].u);pending.splice(+i,1);renderTray()});
+$('#clrTray').onclick=()=>{pending.forEach(p=>URL.revokeObjectURL(p.u));pending=[];renderTray()};
+$('#runAll').onclick=()=>{const list=pending;pending=[];renderTray();const q=$('#queue');
+  list.forEach((p,i)=>{const box=document.createElement('div');box.className='card';q.appendChild(box);box.innerHTML='<div class="status">بالانتظار… صورة '+(i+1)+' من '+list.length+'</div>';busy=busy.then(()=>addJob(p.f,box)).catch(()=>{}).then(()=>URL.revokeObjectURL(p.u))});
+  q.scrollIntoView({behavior:'smooth',block:'start'})};
+const open=new Set();
+function updBar(){$('#saveBar').style.display=open.size>1?'flex':'none';$('#saveN').textContent=open.size+' صفحة جاهزة للحفظ'}
+$('#saveAll').onclick=async e=>{const b=e.target;b.disabled=true;for(const box of [...open]){const sv=box.querySelector('.sv');if(sv)await sv._save()}b.disabled=false;updBar()};
+async function addJob(file,box){
+  const st=m=>{box.innerHTML='<div class="status"><span class="spin"></span>'+esc(m)+'</div>'};
+  st('تجهيز الصورة…');let img;try{img=await loadImg(file)}catch(e){box.innerHTML='<div class="status">تعذّرت قراءة الصورة. إذا كانت بصيغة HEIC حوّلها إلى JPG.</div>';return}
+  const big=toCanvas(img,3000),thumb=toCanvas(img,560).toDataURL('image/jpeg',.62);URL.revokeObjectURL(img.src);
+  const rec={id:'r'+Date.now()+Math.random().toString(36).slice(2,6),ts:Date.now(),date:today,unit:$('#unit').value,shift:$('#shift').value,eng:$('#eng').value,page:'',readings:[],faults:[],thumb,method:'ocr'};
+  let boxes=[];
+  try{
+    const zone=$('#ign').checked?big.height*(1-parseFloat($('#ignp').value)):Infinity;const regions=colorRegions(big).filter(r=>r.y0<zone);
+    curLog=m=>{if(m.status==='recognizing text')st('قراءة الشاشة… '+Math.round(m.progress*100)+'%');else if(/load|initializ/.test(m.status))st('تحميل محرك القراءة (أول مرة فقط)…')};
+    let pp=null;try{st('تحميل قارئ PaddleOCR (أول مرة فقط، ~32 MB)…');pp=await ppLoad()}catch(e){console.warn('PaddleOCR unavailable',e)}
+    let w=null,passes,co;
+    if(pp){const pr=await ppReadPage(pp,big,zone,st);passes=[pr];const ws=pr.data.words;co={pass:{data:{words:[]},s:1},page:'',band:ws.filter(q=>q.bbox.y1<big.height*0.12&&q.bbox.x1<big.width*0.85).map(q=>q.text).join(' ')};window.__ppUsed=true}
+    else{st('تحميل محرك القراءة…');w=await getWorker();passes=[await tiledOCR(w,big,zone,st)];st('قراءة مناطق الإنذار والعنوان…');co=await cropOCR(w,big,regions);passes.unshift(co.pass)}
+    rec.engine=pp?'PaddleOCR':'Tesseract';
+    const words=prepWords(passes,big.height,zone);const cands=candidates(words,valueBoxes(big,zone));
+    if(pp){for(const c of cands){if(!c.gv){const r=await ppRec(pp,big,[c.x0,c.y0,c.x1,c.y1]);const m=ppNorm(r.t).match(/^[-+]?\d+(?:[.,]\d+)?/);if(m&&r.p>0.6)c.gv=m[0].replace(',','.')}c.v=c.gv;c.conf=95}}
+    else await readBoxes(w,big,cands,st);
+    const a=analyse(words,regions,big.height,cands);if(co.page.replace(/[^A-Za-z]/g,'').length>=5)a.page=co.page.slice(0,60);
+    const topTxt=words.filter(w=>w.cy<big.height*0.16&&w.cx<big.width*0.84).map(w=>w.t).join(' ');
+    const bodyTxt=words.filter(w=>w.cx<big.width*0.84).map(w=>w.t).join(' ');
+    let pg=detectPage(co.band||co.page,topTxt);
+    if(!pg){let best=null,bn=2;for(const p of PAGES){if(!p.tags||!p.tags.length)continue;const T=p.tags.map(t=>normTag(t));const n=new Set(a.readings.map(r=>normTag(r.tag)).filter(k=>k&&T.some(t=>lev(k,t)<=1))).size;if(n>bn){bn=n;best=p}}pg=best}
+    if(!pg){if((bodyTxt.match(/\(\s*[8B]{2}[A-Z0-9]{2}/g)||[]).length>=4&&/lead|rotat/i.test(bodyTxt))pg=PAGES.find(p=>p.n==='Motors');else if(/protective\s*status/i.test(bodyTxt))pg=PAGES.find(p=>p.n==='Trip Diagram');else if(/start\s*check\s*\d/i.test(bodyTxt))pg=PAGES.find(p=>p.n==='Start Checks')}const u=detectUnit((co.band||'')+' '+topTxt);if(u)rec.unit=u;rec.pageKey=pg?pg.n:'';
+    let running=$('#ustate').value==='run'?true:$('#ustate').value==='stop'?false:null;
+    if(running===null){const sp=a.readings.filter(r=>/r?pm/i.test(r.unit)||(/speed/i.test(r.desc)&&!/%/.test(r.unit)&&!/\./.test(r.value))).map(r=>parseFloat(r.value)).filter(v=>!isNaN(v));if(sp.length)running=Math.max(...sp)>2700}
+    rec.running=running;
+    if(pg&&pg.status){rec.readings=statusItems(words,regions.filter(g=>g.y0>big.height*0.08),pg,big.width)}
+    else{let rd=applyStatus(twins(fixDecGlobal(colTag(snapTags(a.readings.sort((p,q)=>(p.box[1]-q.box[1])||(p.box[0]-q.box[0])).slice(0,150),pg),words,pg),pg)),running);if(pg&&/Bearing|Generator RTD|Lube Oil/.test(pg.n))rd=outliers(rd);if(pg&&/Bearing|Generator RTD|Wheelspace|Exhaust|Lube Oil/.test(pg.n))rd.forEach(r=>{if(r.color&&r.st&&!/\./.test(r.value)&&/أصفر|أحمر/.test(r.note)){r.st='';r.note=''}});{const nv=rd.filter(r=>/^-?\d+(\.\d+)?$/.test(r.value));const dshare=nv.length?nv.filter(r=>r.value.includes('.')).length/nv.length:0;if(dshare>=0.7)rd.forEach(r=>{if(r.st&&!r.tpl&&/^-?\d+$/.test(r.value)&&/الحدود/.test(r.note)){r.st='';r.note=''}})}rec.readings=spreadRule(rd)}
+    if(pg&&!pg.status&&templates[pg.n]){try{const tr=await applyTemplate(w,big,anchorsOf(words,big.width,big.height),templates[pg.n],st);if(tr&&tr.readings.length){
+        const inside=(r,b)=>{const cx=(r.box[0]+r.box[2])/2,cy=(r.box[1]+r.box[3])/2,hh=b.box[3]-b.box[1];return cx>b.box[0]-hh&&cx<b.box[2]+hh&&cy>b.box[1]-hh*0.6&&cy<b.box[3]+hh*0.6};
+        rec.readings=rec.readings.filter(r=>!r.box||!tr.readings.some(t=>inside(r,t)||normTag(t.tag)===normTag(r.tag)));
+        const tl=tr.readings.map(r=>({...r,color:(regions.find(g=>{const cx=(r.box[0]+r.box[2])/2,cy=(r.box[1]+r.box[3])/2;return cx>g.x0&&cx<g.x1&&cy>g.y0&&cy<g.y1&&(g.x1-g.x0)>=(r.box[2]-r.box[0])*0.5})||{}).t||''}));
+        applyStatus(tl,running);rec.readings=[...tl,...rec.readings];rec.tplUsed=tr.readings.length}else rec.tplFail=true}catch(e){console.warn(e);rec.tplFail=true}}
+    if(!(pg&&pg.status)){const yt=(await yellowTags(w,big,words,regions,pg,pp)).filter((y,i,a)=>!y.tag||a.findIndex(z=>z.tag===y.tag)===i).filter(y=>!rec.readings.some(r=>normTag(r.tag)===normTag(y.tag)&&r.st));rec.readings.push(...yt)}
+    rec.page=pg?pg.n:a.page;
+    const k=560/Math.max(big.width,big.height),kk=Math.min(1,k);
+    rec.readings.forEach(r=>{r.crop=cropImg(big,r.box)});
+    const src=toCanvas(big,2200);
+    boxes={cands:cands.filter(c=>c.v||c.gv).map(c=>[c.x0,c.y0,c.x1,c.y1,mergeVal(c.gv,c.v,c.conf)]),W:big.width,H:big.height,anchors:anchorsOf(words,big.width,big.height),regions:regions.map(r=>[r.x0*kk,r.y0*kk,r.x1*kk,r.y1*kk,r.t]),nums:rec.readings.map(r=>[...r.box.map(v=>v*kk),r.color]),zone:zone<Infinity?zone*kk:0,src,ks:src.width/big.width};
+  }catch(e){curLog=null;console.warn(e);toast('تعذّرت القراءة الآلية لهذه الصورة — يمكنك الإدخال يدوياً.')}
+  editor(box,rec,boxes);
+}
+
+function drawPreview(cv,rec,boxes){const im=new Image();im.onload=()=>{cv.width=im.width;cv.height=im.height;const x=cv.getContext('2d');x.drawImage(im,0,0);x.lineWidth=2;if(boxes.zone){x.fillStyle='rgba(20,20,20,.55)';x.fillRect(0,boxes.zone,im.width,im.height-boxes.zone);x.fillStyle='#fff';x.font='bold 13px sans-serif';x.fillText('IGNORED',8,boxes.zone+16)}
+  (boxes.regions||[]).forEach(r=>{x.strokeStyle=r[4]==='red'?'#ff2a1a':'#ffb800';x.setLineDash([4,3]);x.strokeRect(r[0],r[1],r[2]-r[0],r[3]-r[1])});x.setLineDash([]);
+  (boxes.nums||[]).forEach(r=>{x.strokeStyle=r[4]==='red'?'#ff2a1a':r[4]==='yel'?'#ffb800':'#1e90ff';x.strokeRect(r[0]-1,r[1]-1,r[2]-r[0]+2,r[3]-r[1]+2)})};im.src=rec.thumb}
+
+/* ---------- the daily round: Shatt Al-Basra GT HMI pages ---------- */
+const TD=['FPG1','FPG2','FTG','TMGV','IGV','Cpd','Ctd','WQ','FQLM1','FQG'];
+const rng=(p,a,b,s='')=>Array.from({length:b-a+1},(_,i)=>p+(a+i)+s);
+const PAGES=[
+ {n:'Startup',k:/start\s*-?up(?!.*check)/i,tags:['LT-TH-1','LT-TH-2','LT-TH-3',...TD]},
+ {n:'Bearing Temperatures',k:/bearing\s*temp/i,tags:['BT-TI1-2','BT-TI1-5','BT-TI1-9','BT-TA1-2','BT-TA1-5','BT-TA1-8','BT-J1-1','BT-J1-2','BT-J2-1','BT-J2-2','BT-J3-1','BT-J3-2','BT-GJ1-1A','BT-GJ1-2A','BT-GJ2-1A','BT-GJ2-2A']},
+ {n:'Flame Intensity 0415',k:/flame\s*inten/i,tags:['28FD-4','28FD-5','28FD-10','28FD-11',...TD]},
+ {n:'Lube Oil 0416',k:/lube\s*oil\s*0?41|lube\s*oil(?!.*header)/i,tags:['96QA-2','96QT-2B','LT-G1D','LT-G2D','LT-BT1D-1','LT-B1D-1','LT-B2D-1','LT-B3D-1','96QE-2','LT-OT-1','LT-OT-2','96QV-1'],sw:['63QQ-21','63QQ-22','63QA-2','63QT-2A','63QQ-8','63HQ-1','63HF-1','63QQ-10','71QH-1','71QL-1','23QT-1']},
+ {n:'Start Checks',k:/start\s*check/i,status:'red'},
+ {n:'Trip Diagram',k:/trip\s*diag/i,status:'red'},
+ {n:'Elec Starting Means 0421',k:/start(ing)?\s*means/i,tags:['ET-CRS-1','ET-CRS-2','ET-CRS-3',...TD]},
+ {n:'FSR Control',k:/fsr\s*contr/i,tags:TD},
+ {n:'Normal Comb Gas 0422',k:/comb\s*gas/i,tags:['96FG-1','96FG-2A','96FG-2B','96FG-2C','96VM-1'],sw:['63FG-1','63FG-2','33VG-11']},
+ {n:'IGV Control 0469',k:/igv\s*contr/i,tags:['96TV-1','90TV-1']},
+ {n:'EX2100 EPM 0444',k:/ex\s*2100|epm/i,tags:[]},
+ {n:'Motors',k:/^\s*motors|\bmotors\b(?!.*start)/i,status:'yel'},
+ {n:'Exhaust Temperatures 0415',k:/exhaust\s*temp/i,tags:rng('TT-XD-',1,24)},
+ {n:'Generator RTD',k:/generator\s*rtd|gen\w*\s*rtd/i,tags:['DT-GGC-10','DT-GGC-11','DT-GGH-18','DT-GGH-19','DT-GAH-17','DT-GSF-1','DT-GSF-2','DT-GSF-3','DT-GSF-31','DT-GSF-32','DT-GSF-33','DT-GSA-4','DT-GSA-5','DT-GSA-6','DT-GSA-34','DT-GSA-35','DT-GSA-36'],sw:['71WG-1','71WG-2','71WG-3','71WL-1']},
+ {n:'Vibration Seismic 0415',k:/vib\w*\s*seism/i,tags:[...rng('BB',1,5),...rng('BB',9,12),'39V-1A','39V-1B','39V-2A','39V-3A','39V-3B','39V-4A','39V-4B','39V-5A','39V-5B',...TD]},
+ {n:'Vibration Proximitors',k:/proxim/i,tags:['11X','12Y','21X','22Y','23X','24Y','31X','32Y','91X','92Y','101X','102Y']},
+ {n:'Wheelspace Temp 0415',k:/wheel\s*space/i,tags:['TT-WS1FI-1','TT-WS1FI-2','TT-WS1AO-1','TT-WS1AO-2','TT-WS2FO-1','TT-WS2FO-2','TT-WS2AO-1','TT-WS2AO-2','TT-WS3FO-1','TT-WS3FO-2','TT-WS3AO-1','TT-WS3AO-2','CT-IF-1','CT-IF-2','CT-DA-1','CT-DA-2','TTXM','TTRXB']},
+ {n:'Atomizing Air 0425',k:/atomiz/i,tags:['AAT-1A','AAT-2A','96AA-4A','96AA-4B','96AA-4C','96AD-1']},
+ {n:'Cooling Sealing Air 0417',k:/seal\w*\s*air/i,tags:['96CD-1A','96CD-1B','96CD-1C'],sw:['63TK-1','63TK-2','33CB-1','33CB-2','33CB-3','33CB-4']},
+ {n:'Cooling Water 0420',k:/cooling\s*water/i,tags:['WT_TL-1','WT_TL-2','AAT-1A','AAT-2A']}];
+window.__PAGES=PAGES;$('#limPage').insertAdjacentHTML('beforeend',PAGES.filter(p=>p.tags&&p.tags.length).map(p=>`<option>${esc(p.n)}</option>`).join(''));
+$('#limPage').onchange=renderLim;
+document.getElementById('tplList').addEventListener('click',async e=>{const k=e.target.dataset.dt;if(!k)return;if(!e.target.dataset.sure){e.target.dataset.sure=1;e.target.textContent='تأكيد؟';return}try{await delTpl(k);toast('حُذف القالب')}catch(err){toast('تعذّر الحذف')}});renderTpl();
+$('#limFill').onclick=()=>{const pp=PAGES.find(p=>p.n===$('#limPage').value);if(!pp)return;let n=0;pp.tags.forEach(t=>{if(!limits.some(l=>normTag(l.tag)===normTag(t))){limits.push({tag:t,desc:'',min:'',max:'',unit:/^(BT|LT|DT|TT|CT|AAT|WT|ET)/i.test(t)?'°C':/^(BB|39V|MAX)/i.test(t)?'mm/s':/^96/.test(t)?'bar':'',severity:'md'});n++}});limDirty=true;renderLim();toast('أُضيف '+n+' Tag — اكتب Min/Max ثم «حفظ الحدود»')};
+$('#pglist').innerHTML=PAGES.map(p=>`<option value="${esc(p.n)}">`).join('');
+function detectPage(title,text){for(const t of [title,text]){if(!t)continue;for(const p of PAGES)if(p.k.test(t))return p}return null}
+function detectUnit(t){const m=String(t||'').match(/GT\s*([0-9]{1,2})\s*[_\- ]?\s*S\s*V\s*R/i);return m&&+m[1]>=1&&+m[1]<=10?'GT'+(+m[1]):''}
+function lev(a,b){const d=Array.from({length:a.length+1},(_,i)=>[i]);for(let j=1;j<=b.length;j++)d[0][j]=j;for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[a.length][b.length]}
+/* replace a misread tag with the nearest real tag of this page */
+function snapTags(readings,pg){if(!pg||!pg.tags||!pg.tags.length)return readings;const T=pg.tags.map(t=>[t,normTag(t).replace(/I/g,'1')]);
+  readings.forEach(r=>{for(const src of [r.tag,r.desc]){const k=normTag(src).replace(/I/g,'1');if(!k||k.length<2)continue;let best=null,bd=9,b2=9;for(const [t,n] of T){const d=lev(k,n);if(d<bd){b2=bd;bd=d;best=t}else if(d<b2)b2=d}if(best&&(bd<=Math.max(0,Math.floor(normTag(best).length/5))||(bd<=2&&k.length>=4&&b2>bd))){r.tag=best;break}}});return readings}
+/* temperature pages show one decimal everywhere: restore lost decimal points using the whole page range */
+function fixDecGlobal(readings,pg){if(!pg||!/Bearing|Generator RTD|Wheelspace|Exhaust|Lube Oil/.test(pg.n))return readings;readings=readings;
+  const D=readings.filter(r=>/^-?\d+\.\d$/.test(r.value)).map(r=>Math.abs(parseFloat(r.value))).filter(v=>v>=1&&v<300).sort((a,b)=>a-b);if(D.length<3)return readings;
+  const md=D[D.length>>1],lo=Math.min(...D.filter(v=>v>=md/2)),hi=Math.max(...D.filter(v=>v<=md*2));
+  readings.forEach(r=>{if(!/^-?\d{3,4}$/.test(r.value)||/%|RPM|PM|speed/i.test(r.unit+' '+r.desc))return;const neg=r.value.startsWith('-'),d=r.value.replace('-','');const f=d.slice(0,-1)+'.'+d.slice(-1);if(+f>=lo*0.8&&+f<=hi*1.25)r.value=(neg?'-':'')+f});return readings}
+/* page templates: find the screen with shared labels, then read each value at its known place */
+function anchorsOf(words,W,H){const m={};words.forEach(w=>{if(w.num)return;const t=w.t.toUpperCase().replace(/[^A-Z0-9]/g,'');if(t.length<3||!/[A-Z]/.test(t))return;(m[t]=m[t]||[]).push([w.cx/W,w.cy/H])});const out=[];for(const k in m)if(m[k].length===1)out.push({t:k,x:m[k][0][0],y:m[k][0][1]});return out}
+function solve3(A,b){const M=A.map((r,i)=>[...r,b[i]]);for(let c=0;c<3;c++){let p=c;for(let r=c+1;r<3;r++)if(Math.abs(M[r][c])>Math.abs(M[p][c]))p=r;[M[c],M[p]]=[M[p],M[c]];if(Math.abs(M[c][c])<1e-12)return null;for(let r=0;r<3;r++)if(r!==c){const f=M[r][c]/M[c][c];for(let k=c;k<4;k++)M[r][k]-=f*M[c][k]}}return [M[0][3]/M[0][0],M[1][3]/M[1][1],M[2][3]/M[2][2]]}
+function fitAffine(P){if(P.length<3)return null;const fit=S=>{const A=[[0,0,0],[0,0,0],[0,0,0]],bx=[0,0,0],by=[0,0,0];for(const p of S){const v=[p[0],p[1],1];for(let i=0;i<3;i++){for(let j=0;j<3;j++)A[i][j]+=v[i]*v[j];bx[i]+=v[i]*p[2];by[i]+=v[i]*p[3]}}const a=solve3(A.map(r=>[...r]),bx),b=solve3(A.map(r=>[...r]),by);return a&&b?[a,b]:null};
+  const ap=(T,p)=>[T[0][0]*p[0]+T[0][1]*p[1]+T[0][2],T[1][0]*p[0]+T[1][1]*p[1]+T[1][2]];let best=null,bi=[];
+  for(let it=0;it<300;it++){const S=[];while(S.length<3){const q=P[Math.floor(Math.random()*P.length)];if(!S.includes(q))S.push(q)}const T=fit(S);if(!T)continue;const sc=Math.hypot(T[0][0],T[1][0]);if(sc<0.5||sc>2)continue;
+    const inl=P.filter(p=>{const q=ap(T,p);return Math.hypot(q[0]-p[2],q[1]-p[3])<0.018});if(inl.length>bi.length){bi=inl;best=T}}
+  if(!best||bi.length<4)return null;const T=fit(bi);return T?{T,n:bi.length,ap:p=>ap(T,p)}:null}
+async function applyTemplate(w,big,cur,tpl,st){const W=big.width,H=big.height,cm={};cur.forEach(a=>cm[a.t]=a);
+  const P=tpl.anchors.filter(a=>cm[a.t]).map(a=>[a.x,a.y,cm[a.t].x,cm[a.t].y]);const F=fitAffine(P);if(!F)return null;
+  const cands=tpl.items.map(it=>{const c=[[it.b[0],it.b[1]],[it.b[2],it.b[1]],[it.b[0],it.b[3]],[it.b[2],it.b[3]]].map(F.ap);const xs=c.map(q=>q[0]*W),ys=c.map(q=>q[1]*H);return {x0:Math.min(...xs),y0:Math.min(...ys),x1:Math.max(...xs),y1:Math.max(...ys),box:true,it}}).filter(b=>b.x0>=0&&b.y0>=0&&b.x1<=W&&b.y1<=H);
+  const out=[];let k=0;for(const b of cands){k++;if(st)st('قراءة القيم بالقالب '+k+'/'+cands.length);const it=b.it,cx=(b.x0+b.x1)/2,cy=(b.y0+b.y1)/2;
+    let r=null;try{const pp=await ppLoad().catch(()=>null);r=pp?await ppTap(pp,big,cx/W,cy/H,null):await tapRead(big,cx/W,cy/H,null)}catch(e){}
+    if(!r)continue;const rc=[(r.box[0]+r.box[2])/2,(r.box[1]+r.box[3])/2];if(Math.hypot(rc[0]-cx,rc[1]-cy)>Math.max(b.x1-b.x0,(b.y1-b.y0)*3)*0.9)continue;
+    let v=String(r.value||'').trim();if(!/^-?\d+(\.\d+)?$/.test(v))continue;
+    if(it.dec>0&&!v.includes('.')){const neg=v.startsWith('-'),d=v.replace('-','');if(d.length>it.dec)v=(neg?'-':'')+d.slice(0,-it.dec)+'.'+d.slice(-it.dec)}
+    if(it.dec===0&&v.includes('.'))v=String(Math.round(parseFloat(v)));
+    out.push({tag:it.tag,desc:it.desc||'',value:v,unit:it.unit||'',color:'',conf:r.conf||0,box:r.box,tpl:true})}
+  return {readings:out,n:F.n}}
+/* calibration: tag by tag, the user taps where each value sits */
+function calibrate(pp,rec,bx,onSave){const src=bx.src,ks=bx.ks,W=bx.W,H=bx.H;const tags=[...pp.tags];const items={};let i=0,zoom=2;
+  /* prefill from readings that already have a tag and a place */
+  rec.readings.forEach(r=>{if(r.box&&r.tag&&tags.includes(r.tag)&&!items[r.tag])items[r.tag]={box:r.box.slice(),v:r.value}});
+  const m=document.createElement('div');m.className='cal';m.innerHTML=`<div class="calhd"><b>معايرة: ${esc(pp.n)}</b><span class="calp"></span><button class="btn ghost sm calx">إغلاق</button></div>
+   <div class="calimg"><canvas></canvas></div>
+   <div class="calft"><div class="calq"></div><div class="row" style="gap:6px;margin-top:6px"><button class="btn ghost sm calb">→ السابق</button><button class="btn ghost sm cals">تخطي</button><button class="btn ghost sm calz">تكبير ×${zoom}</button><button class="btn red sm calsv">حفظ القالب</button></div></div>`;
+  document.body.appendChild(m);document.body.style.overflow='hidden';const cv=m.querySelector('canvas'),wrap=m.querySelector('.calimg');
+  const draw=()=>{cv.width=src.width;cv.height=src.height;const x=cv.getContext('2d');x.drawImage(src,0,0);x.lineWidth=3;x.font='bold 22px sans-serif';
+    for(const t in items){const b=items[t].box.map(v=>v*ks);x.strokeStyle=t===tags[i]?'#e8251a':'#1e90ff';x.strokeRect(b[0]-3,b[1]-3,b[2]-b[0]+6,b[3]-b[1]+6);x.fillStyle='rgba(0,0,0,.65)';const tw=x.measureText(t).width;x.fillRect(b[0],b[1]-28,tw+8,24);x.fillStyle='#fff';x.fillText(t,b[0]+4,b[1]-9)}
+    cv.style.width=(zoom*100)+'%';const done=tags.filter(t=>items[t]).length;m.querySelector('.calp').textContent=` ${done}/${tags.length}`;
+    m.querySelector('.calq').innerHTML=i<tags.length?`اضغط على قيمة <b dir="ltr" style="font-size:20px">${esc(tags[i])}</b> بالصورة${items[tags[i]]?` <span class="muted">(محددة: ${esc(items[tags[i]].v||'')} — اضغط مكاناً آخر للتغيير أو «تخطي»)</span>`:''}`:'انتهت الـTags. اضغط «حفظ القالب».';
+    if(i<tags.length&&items[tags[i]]){const b=items[tags[i]].box.map(v=>v*ks);const sc=cv.clientWidth/cv.width;wrap.scrollTo({left:Math.max(0,b[0]*sc-wrap.clientWidth/2),top:Math.max(0,b[1]*sc-wrap.clientHeight/2),behavior:'smooth'})}};
+  const close=()=>{m.remove();document.body.style.overflow=''};
+  m.querySelector('.calx').onclick=close;
+  m.querySelector('.calb').onclick=()=>{i=Math.max(0,i-1);draw()};
+  m.querySelector('.cals').onclick=()=>{i=Math.min(tags.length,i+1);draw()};
+  m.querySelector('.calz').onclick=e=>{zoom=zoom>=3?1:zoom+1;e.target.textContent='تكبير ×'+zoom;draw()};
+  cv.addEventListener('click',async e=>{if(i>=tags.length)return;const rc=cv.getBoundingClientRect();const px=(e.clientX-rc.left)/rc.width*src.width,py=(e.clientY-rc.top)/rc.height*src.height;
+    /* snap to a detected value box when one is under the finger */
+    let best=null,bd=Infinity;for(const c of (bx.cands||[])){const b=[c[0]*ks,c[1]*ks,c[2]*ks,c[3]*ks];const inside=px>=b[0]-8&&px<=b[2]+8&&py>=b[1]-8&&py<=b[3]+8;const d=Math.hypot((b[0]+b[2])/2-px,(b[1]+b[3])/2-py);if(inside&&d<bd){bd=d;best=c}}
+    const tag=tags[i];if(best){items[tag]={box:best.slice(0,4),v:best[4]};i++;draw();return}
+    m.querySelector('.calq').textContent='جارٍ تحديد المربع…';try{const r=await (busy=busy.then(async()=>{const P=await ppLoad().catch(()=>null);return P?ppTap(P,src,px/src.width,py/src.height,pp):tapRead(src,px/src.width,py/src.height,pp)}));if(r){items[tag]={box:r.box.map(v=>v/ks),v:r.value};i++}else toast('لم أجد رقماً هنا — اضغط على الرقم نفسه')}catch(err){toast('تعذّر التحديد')}draw()});
+  m.querySelector('.calsv').onclick=async e=>{const list=tags.filter(t=>items[t]);if(list.length<3){toast('حدّد 3 قيم على الأقل');return}if((bx.anchors||[]).length<6){toast('النصوص المقروءة قليلة — صوّر الشاشة كاملة وبوضوح');return}
+    const vals=list.map(t=>String(items[t].v||'')).filter(v=>/\d/.test(v));const d1=vals.filter(v=>/\.\d$/.test(v)).length,d0=vals.filter(v=>/^-?\d+$/.test(v)).length;
+    const pageDec=/Bearing|Generator RTD|Wheelspace|Exhaust|Lube Oil/.test(pp.n)?1:(d1>=d0?1:0);
+    const it=list.map(t=>{const L=limits.find(l=>normTag(l.tag)===normTag(t));const v=String(items[t].v||'');const b=items[t].box;return {tag:t,desc:L?L.desc.replace(/ — .*$/,''):'',unit:L?L.unit:'',dec:/\.\d+$/.test(v)?v.split('.')[1].length:pageDec,b:[b[0]/W,b[1]/H,b[2]/W,b[3]/H]}});
+    e.target.disabled=true;try{await onSave({page:pp.n,items:it,anchors:bx.anchors,ts:Date.now()});close()}catch(err){toast('تعذّر حفظ القالب');e.target.disabled=false}};
+  i=tags.findIndex(t=>!items[t]);if(i<0)i=tags.length;draw()}
+/* bar-chart values: take the tag from the column name above (e.g. "J1-1" -> BT-J1-1) */
+function colTag(readings,words,pg){if(!pg||!pg.tags||!pg.tags.length||!/Bearing|Wheelspace|Generator RTD/.test(pg.n))return readings;const T=pg.tags.map(t=>[t,normTag(t).replace(/I/g,'1')]);
+  readings.forEach(r=>{if(r.tag||!r.box)return;const cx=(r.box[0]+r.box[2])/2,bw=r.box[2]-r.box[0],h=Math.max(8,r.box[3]-r.box[1]);
+    const c=words.filter(w=>!w.num&&w.y1<=r.box[1]+2&&r.box[1]-w.y1<h*16&&Math.abs(w.cx-cx)<Math.max(bw*0.8,h*2)).sort((a,b)=>b.y1-a.y1);
+    for(const w of c){const k=normTag(w.t).replace(/I/g,'1');if(k.length<3)continue;const m=T.filter(([t,n])=>n.endsWith(k)||lev(n.slice(-k.length),k)===0);if(m.length===1){if(!readings.some(o=>o!==r&&o.tag===m[0][0]&&dgv(o.value)!==dgv(r.value)))r.tag=m[0][0];break}}});return readings}
+const dgv=x=>String(x).replace(/[^0-9]/g,'');
+/* the same value appears twice (diagram + bar): fix misreads from the twin, then keep one copy */
+function twins(readings){const dg=x=>String(x).replace(/[^0-9]/g,'');
+  readings.forEach(r=>{if(/^\d{4}$/.test(r.value)){const p=r.value.slice(0,2)+'.'+r.value[2];if(readings.some(o=>o!==r&&/\./.test(o.value)&&Math.abs(parseFloat(o.value)-parseFloat(p))<=0.5))r.value=p}});
+  for(let i=readings.length-1;i>=0;i--){const r=readings[i];const o=readings.find(o=>o!==r&&dg(o.value).length>=3&&dg(r.value).length>=3&&(dg(o.value).endsWith(dg(r.value))||dg(r.value).endsWith(dg(o.value)))&&(o.tag||!r.tag)&&Math.abs(parseFloat(o.value))>=300);
+    if(o&&Math.abs(parseFloat(r.value))>=300||o&&o.value===r.value&&!r.tag){if(!o.tag&&r.tag)o.tag=r.tag;if(dg(r.value).length>dg(o.value).length||(dg(r.value)===dg(o.value)&&String(r.value).startsWith('-')&&!String(o.value).startsWith('-')))o.value=r.value;if(!o.crop)o.crop=r.crop;readings.splice(i,1)}}
+  return readings}
+/* exhaust spread vs the allowable spread shown on the same screen */
+function spreadRule(readings){const A=readings.find(r=>/allow/i.test(r.desc));if(!A)return readings;const a=parseFloat(A.value);if(isNaN(a))return readings;
+  readings.forEach(r=>{if(r!==A&&/spread/i.test(r.desc)&&!r.st){const v=parseFloat(r.value);if(!isNaN(v)&&v>a){r.st='hi';r.lim='≤'+A.value;r.note='فرق حرارة العادم أكبر من المسموح'}}});return readings}
+/* any page: a tag shown in a yellow box (e.g. 63FG-1, 63HQ-1, 63TK-1, 71WL-1) means a problem */
+async function yellowTags(w,src,words,regions,pg,pp){const W=src.width,H=src.height,out=[],used=new Set(),SW=pg&&pg.sw?pg.sw:[];
+  const match=raw=>{raw=raw.toUpperCase().replace(/[^A-Z0-9_\-]/g,'');if(!raw)return '';if(SW.length){let bt=null,bd=9;for(const t of SW){if(used.has(t))continue;const d=lev(normTag(raw).replace(/O/g,'0'),normTag(t));if(d<bd){bd=d;bt=t}}if(bt&&bd<=Math.max(2,Math.floor(normTag(bt).length/2)))return bt}return TAG_RE.test(raw)&&/\d/.test(raw)&&/[A-Z]/.test(raw)?raw:''};
+  for(const g of regions){if(g.t!=='yel'||g.x0>W*0.86)continue;const gw=g.x1-g.x0,gh=g.y1-g.y0;if(gw<gh*1.4||gh<H*0.012||gh>H*0.09)continue;
+    const ins=words.filter(q=>q.cx>g.x0&&q.cx<g.x1&&q.cy>g.y0&&q.cy<g.y1);if(ins.some(q=>q.num&&/\./.test(q.gv||'')))continue;
+    /* one item per text line (two touching boxes become one region) */
+    const lines=[];[...ins].sort((a,b)=>a.cy-b.cy).forEach(q=>{const l=lines.find(l=>Math.abs(l[0].cy-q.cy)<q.h*0.6);l?l.push(q):lines.push([q])});
+    const parts=lines.length?lines.map(l=>({raw:l.sort((a,b)=>a.x0-b.x0).map(q=>q.t).join(''),y0:Math.min(...l.map(q=>q.y0)),y1:Math.max(...l.map(q=>q.y1))})):[{raw:'',y0:g.y0,y1:g.y1}];
+    const rows=parts.length>1?parts:[{raw:parts[0].raw,y0:g.y0,y1:g.y1}];
+    for(const p of rows){let tag=match(p.raw);
+      if(!tag){/* dedicated read of the box text */const sub={x0:g.x0,y0:Math.max(g.y0,p.y0-2),x1:g.x1,y1:Math.min(g.y1,p.y1+2)};if(rows.length===1){sub.y0=g.y0;sub.y1=g.y1}
+        if(pp){const r=await ppRec(pp,src,[sub.x0,sub.y0,sub.x1,sub.y1]);tag=match(ppNorm(r.t))}
+        const cb=!pp&&w?cropBin(src,sub,90):null;if(cb){await w.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:'0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-'});try{const {data}=await w.recognize(cb.c);tag=match(data.text||'')}finally{await w.setParameters({tessedit_pageseg_mode:'11',tessedit_char_whitelist:''})}}}
+      if(!tag&&p.raw&&!/\d/.test(p.raw))continue;if(SW.length&&tag&&!SW.includes(tag)&&rows.length>1)continue;if(!tag&&rows.length>1)continue;if(tag)used.add(tag);
+      out.push({tag,desc:'مؤشر بالأصفر على الشاشة'+(tag?'':' (Tag غير مقروء — اختره)'),value:'',unit:'',color:'yel',conf:0,st:'md',lim:'',note:'حساس/مفتاح مؤشر بالأصفر — توجد مشكلة',box:[g.x0,rows.length>1?p.y0-3:g.y0,g.x1,rows.length>1?p.y1+3:g.y1]})}}
+  return out}
+const MOTORS=['88WC','88FU','88HQ','88VG','88FD','88CR','88QB','88VL','88TG','88QE','88TK','88BT','88FA','88FM','88AB','88JS','88QV','88QV-1A','88WN','88QA'];
+const MOTOR_N={'88WC':'Cooling Water Pumps','88FU':'Crude Oil Forwarding Pumps','88HQ':'Aux Hydraulic Pump','88VG':'Load Compartment Fans','88FD':'Fuel Forward Pumps','88CR':'Cranking Motor','88QB':'Bearing Lift Oil Pumps','88VL':'Gas Compartment Fans','88TG':'Turning Gear Motor','88QE':'Emerg Lube Oil Pump','88TK':'Turbine Exhaust Fans','88BT':'Auxiliary Compartment Fans','88FA':'Fuel Additive Pumps','88FM':'AC Flow Divider Motor','88AB':'Atom Air Boost Pump','88JS':'WI Enclosure Ventilation Fans','88QV':'Oil Mist Fans','88QV-1A':'Mist Elim Pump','88WN':'Water Injection Pump','88QA':'Aux Lube Oil Pump'};
+function motorCode(t){const m=String(t||'').toUpperCase().match(/[8B]{2}[A-Z0-9]{2}(-1A)?/g);if(!m)return '';let best='',bd=9;for(const c of m){const k=c.replace(/^B/,'8').replace(/^8B/,'88');for(const M of MOTORS){const d=lev(k,M);if(d<bd){bd=d;best=M}}}return bd<=1?best:''}
+/* status pages: coloured boxes are the faults */
+function statusItems(words,regions,pg,W){const items=[];
+  for(const g of regions){if(g.x0>W*0.86)continue;if(pg.status==='red'&&g.t!=='red')continue;if(pg.status==='yel'&&g.t!=='yel')continue;
+    const inside=words.filter(w=>w.cx>g.x0-2&&w.cx<g.x1+2&&w.cy>g.y0-2&&w.cy<g.y1+2).sort((a,b)=>(a.cy-b.cy)||(a.x0-b.x0)).map(w=>w.t).join(' ').trim();
+    if(pg.status==='yel'&&/STOP|LEAD|RUN|ENAB|DISAB|AUTO|ROTAT|\bOFF\b|\bON\b/i.test(inside)&&!/FAUL|AULT/i.test(inside))continue;if(pg.status==='yel'&&(g.x1-g.x0)<(g.y1-g.y0)*1.3)continue;
+    const h=g.y1-g.y0;const ctx=words.filter(w=>w.y1<=g.y0+2&&g.y0-w.y1<h*(pg.status==='yel'?6.5:4.5)&&w.x1>g.x0-h*6&&w.x0<g.x1+h*2&&/[A-Za-z]{3}/.test(w.t)).sort((a,b)=>(b.cy-a.cy)||(a.x0-b.x0)).slice(0,6).reverse().map(w=>w.t).join(' ');
+    const tag=pg.status==='yel'?motorCode(ctx):(inside.match(/\b[lL][0-9A-Za-z_]{2,}\b/)||[''])[0];
+    items.push({tag,desc:(pg.status==='yel'?(MOTOR_N[tag]||ctx||'محرك')+' — Fault':inside||ctx).trim(),value:'',unit:'',color:g.t,conf:0,st:pg.status==='red'?'hi':'md',lim:'',note:pg.status==='red'?(pg.n==='Trip Diagram'?'إشارة Trip ظاهرة بالأحمر':'شرط بدء غير متحقق (أحمر)'):'عطل محرك (Fault)',box:[g.x0,g.y0,g.x1,g.y1]})}
+  return items}
+
+const STOPT=[['hi','عطل عالٍ'],['md','عطل متوسط'],['lo','عطل منخفض'],['','طبيعي (إزالة)']];
+function editor(box,rec,boxes){
+  box.innerHTML=`<div class="res"><div class="prev"><div class="pv"><canvas aria-label="صورة الشاشة مع ما تمت قراءته"></canvas></div><button class="btn ghost sm zb">تكبير الصورة</button><p class="muted" style="margin:4px 0 0;font-size:13px"><b style="color:var(--ink)">اضغط على أي رقم بالصورة لقراءته وإضافته.</b> أزرق: مقروء · أحمر/أصفر: إنذار · رمادي: متجاهلة</p></div><div>
+   <div class="row"><div class="f" style="flex:2 1 200px"><label>اسم الصفحة</label><input class="pg" list="pglist" value="${esc(rec.page)}" placeholder="اختر الصفحة"></div><div class="f"><label>الوحدة</label><select class="un">${UNITS.map(u=>`<option${u===rec.unit?' selected':''}>${u}</option>`).join('')}</select></div><div class="f"><label>التاريخ</label><input class="dt" type="date" value="${esc(rec.date)}"></div></div>
+   <p class="muted sumline" style="margin:8px 0 0"></p>
+  </div></div>
+  <h3 class="ttl" style="margin-top:14px">المتحسسات العاطلة <span class="muted cnt"></span></h3>
+  <p class="muted" style="margin:2px 0 8px">فقط هذه تُحفظ في السجل والتقرير. القراءات الطبيعية لا تُسجَّل.</p>
+  <div class="slist"></div>
+  <div class="missw"></div>
+  <button class="btn ghost sm add">+ إضافة عطل يدوياً</button>
+  <details class="normals"><summary class="nsum"></summary><p class="muted" style="margin:4px 0">صحّح الـTag والقيمة إذا لزم. اضغط «عطل» إذا كانت عاطلة، أو × لحذف رقم ليس متحسساً.</p><div class="nlist"></div></details>
+  <div class="tplb"><b>قالب الصفحة:</b> <span class="tpls muted"></span><br><button class="btn sm tplcal" style="margin-top:8px">معايرة الصفحة (مرة وحدة)</button><br><span class="muted" style="font-size:13px">تفتح الصورة كبيرة، والتطبيق يطلب منك Tag بعد Tag: تضغط على رقمه بالصورة. بعدها كل صورة جاية لهذه الصفحة تُقرأ من نفس الأماكن.</span></div>
+  <div style="margin-top:10px"><label>ملاحظات الصفحة</label><textarea class="nt" placeholder="إجراء متخذ، إبلاغ الصيانة…">${esc(rec.notes||'')}</textarea></div>
+  <div class="row" style="margin-top:12px"><button class="btn sv">حفظ في السجل</button><button class="btn ghost dl">إلغاء</button></div>`;
+  box.dataset.tl='tl'+Math.random().toString(36).slice(2,8);box.insertAdjacentHTML('beforeend',`<datalist id="${box.dataset.tl}"></datalist>`);
+  const fillTl=()=>{const pp=PAGES.find(p=>p.n===box.querySelector('.pg').value.trim());box.querySelector('#'+box.dataset.tl).innerHTML=(pp?[...(pp.tags||[]),...(pp.sw||[])]:[]).map(t=>`<option value="${esc(t)}">`).join('')};fillTl();
+  open.add(box);updBar();
+  drawPreview(box.querySelector('canvas'),rec,boxes||{});
+  const list=box.querySelector('.slist'),nl=box.querySelector('.nlist');
+  const draw=()=>{const F=rec.readings.map((r,i)=>[r,i]).filter(([r])=>r.st),N=rec.readings.map((r,i)=>[r,i]).filter(([r])=>!r.st);
+    list.innerHTML=F.length?F.map(([r,i])=>`<div class="fault sr" data-i="${i}" style="${r.st==='hi'?'border-color:var(--red);background:color-mix(in srgb,var(--red) 8%,transparent)':'border-color:var(--amb);background:color-mix(in srgb,var(--amb) 10%,transparent)'}">${r.crop?`<img class="crp" alt="" src="${esc(r.crop)}">`:''}<input data-k="tag" list="${box.dataset.tl}" value="${esc(r.tag)}" placeholder="Tag" dir="ltr"><input class="w" data-k="desc" value="${esc(r.desc)}" placeholder="الوصف"><input data-k="value" value="${esc(r.value)}" placeholder="القراءة" dir="ltr" inputmode="decimal"><input data-k="unit" value="${esc(r.unit)}" placeholder="الوحدة" dir="ltr"><select data-k="st">${STOPT.map(([k,v])=>`<option value="${k}"${k===r.st?' selected':''}>${v}</option>`).join('')}</select><button class="x" title="حذف" aria-label="حذف">×</button>${r.lim||r.note?`<div class="muted" style="grid-column:1/-1;order:9">${r.lim?'الحد: <span dir="ltr">'+esc(r.lim)+'</span> ':''}${esc(r.note||'')}</div>`:''}</div>`).join(''):'<p class="status">✓ لا توجد متحسسات عاطلة في هذه الصفحة.</p>';
+    nl.innerHTML=N.map(([r,i])=>`<div class="nrow nr" data-i="${i}">${r.crop?`<img class="crp" alt="" src="${esc(r.crop)}">`:''}<input class="ni" data-k="tag" list="${box.dataset.tl}" value="${esc(r.tag)}" placeholder="Tag" dir="ltr"><input class="ni nv" data-k="value" value="${esc(r.value)}" dir="ltr" inputmode="decimal"><button class="add1" data-f="${i}">عطل</button><button class="x" data-dn="${i}" aria-label="حذف">×</button></div>`).join('');
+    box.querySelector('.nsum').textContent='قراءات طبيعية ('+N.length+') — لا تُحفظ';box.querySelector('.normals').style.display=N.length?'':'none';
+    {const pp=PAGES.find(p=>p.n===box.querySelector('.pg').value.trim());const have=new Set(rec.readings.map(r=>normTag(r.tag)));const miss=pp&&pp.tags?pp.tags.filter(t=>!have.has(normTag(t))):[];
+     box.querySelector('.missw').innerHTML=miss.length?`<p class="muted" style="margin:10px 0 0">Tags هذه الصفحة غير المقروءة (${miss.length}) — اضغط على أي واحد لإدخال قراءته:</p><div class="miss">${miss.map(t=>`<button data-m="${esc(t)}" dir="ltr">${esc(t)}</button>`).join('')}</div>`:''}
+    {const pn=box.querySelector('.pg').value.trim(),t=templates[pn];box.querySelector('.tpls').textContent=rec.tplUsed?`طُبّق القالب — ${rec.tplUsed} قيمة قُرئت من مواقعها المحفوظة.`:rec.tplFail?'يوجد قالب لكن لم أستطع مطابقته مع هذه الصورة (صوّر الشاشة كاملة).':t?`محفوظ (${t.items.length} قيمة).`:'لا يوجد قالب لهذه الصفحة بعد.'}
+    box.querySelector('.cnt').textContent='('+F.length+')';box.querySelector('.sumline').textContent=`قُرئت ${rec.readings.length} قيمة · ${F.length} عطل · القارئ: ${rec.engine||'—'}`};
+  draw();
+  list.addEventListener('input',e=>{const r=e.target.closest('.sr');if(r&&e.target.dataset.k&&e.target.dataset.k!=='st')rec.readings[+r.dataset.i][e.target.dataset.k]=e.target.value});
+  list.addEventListener('change',e=>{const r=e.target.closest('.sr');if(r&&e.target.dataset.k==='st'){const x=rec.readings[+r.dataset.i];x.st=e.target.value;if(!x.st)x.note='';else if(!x.note)x.note='تحديد يدوي';draw()}});
+  list.addEventListener('click',e=>{if(e.target.classList.contains('x')){rec.readings.splice(+e.target.closest('.sr').dataset.i,1);draw()}});
+  box.querySelector('.missw').addEventListener('click',e=>{const t=e.target.dataset.m;if(!t)return;const L=limits.find(l=>normTag(l.tag)===normTag(t));rec.readings.push({tag:t,desc:L?L.desc.replace(/ — .*$/,''):'',value:'',unit:L?L.unit:'',color:'',st:'md',lim:'',note:'لم تُقرأ من الصورة — إدخال يدوي'});draw();const inp=list.querySelector(`.sr[data-i="${rec.readings.length-1}"] input[data-k=value]`);if(inp)inp.focus()});
+  list.addEventListener('change',e=>{if(e.target.dataset.k!=='value')return;const x=rec.readings[+e.target.closest('.sr').dataset.i];const st0=x.st,n0=x.note;applyStatus([x],rec.running);if(!x.st){x.st=st0||'md';x.note=n0}draw()});
+  box.querySelector('.pg').addEventListener('change',()=>{fillTl();draw()});
+  list.addEventListener('change',e=>{if(e.target.dataset.k!=='tag')return;const x=rec.readings[+e.target.closest('.sr').dataset.i];const st0=x.st,n0=x.note;applyStatus([x],rec.running);if(!x.st){x.st=st0||'md';x.note=n0}draw()});
+  box.querySelector('.zb').onclick=e=>{const pv=box.querySelector('.pv');pv.classList.toggle('z');e.target.textContent=pv.classList.contains('z')?'تصغير الصورة':'تكبير الصورة'};
+  box.querySelector('canvas').addEventListener('click',e=>{if(!boxes||!boxes.src)return;const cv=e.currentTarget,rc=cv.getBoundingClientRect();const nx=(e.clientX-rc.left)/rc.width,ny=(e.clientY-rc.top)/rc.height;toast('جارٍ قراءة الرقم…');
+    const pp=PAGES.find(p=>p.n===box.querySelector('.pg').value.trim());
+    busy=busy.then(async()=>{const P=await ppLoad().catch(()=>null);return P?ppTap(P,boxes.src,nx,ny,pp):tapRead(boxes.src,nx,ny,pp)}).then(r=>{if(!r){toast('لم أجد رقماً في هذا المكان — كبّر أو أدخله يدوياً');return}r.crop=cropImg(boxes.src,r.box);r.box=r.box.map(v=>v/boxes.ks);
+      if(!r.unit&&pp&&/Bearing|Generator RTD|Wheelspace|Exhaust|Lube Oil/.test(pp.n))r.unit='°C';
+      applyStatus([r],rec.running);
+      if(!r.st){const a=rec.readings.map(o=>Math.abs(parseFloat(o.value))).filter(v=>!isNaN(v)).sort((x,y)=>x-y);const v=Math.abs(parseFloat(r.value));if(a.length>=5&&v>=300&&v>a[a.length>>1]*10){r.st='hi';r.note='قراءة شاذة جداً مقارنة بباقي الصفحة — تحقق من الحساس'}}if(!r.st){r.st='md';r.note='أُضيف بالضغط على الصورة'}rec.readings.push(r);draw();toast('أُضيفت القراءة '+r.value+(r.tag?' ('+r.tag+')':''))}).catch(()=>toast('تعذّرت القراءة'))});
+  nl.addEventListener('input',e=>{const r=e.target.closest('.nr');if(r&&e.target.dataset.k)rec.readings[+r.dataset.i][e.target.dataset.k]=e.target.value});
+  nl.addEventListener('change',e=>{const r=e.target.closest('.nr');if(!r)return;const x=rec.readings[+r.dataset.i];applyStatus([x],rec.running);if(x.st)draw()});
+  nl.addEventListener('click',e=>{if(e.target.dataset.dn!==undefined){rec.readings.splice(+e.target.dataset.dn,1);draw()}});
+  box.querySelector('.tplcal').onclick=()=>{const pn=box.querySelector('.pg').value.trim();const pp=PAGES.find(p=>p.n===pn);if(!pp||pp.status||!pp.tags||!pp.tags.length){toast('اختر اسم الصفحة من القائمة أولاً (صفحات القيم فقط)');return}if(!boxes||!boxes.src){toast('الصورة غير متوفرة للمعايرة');return}
+    calibrate(pp,rec,boxes,async tpl=>{await saveTpl(tpl);toast('حُفظ قالب '+pp.n+' — '+tpl.items.length+' قيمة. جارٍ تطبيقه على هذه الصورة…');
+      try{const w=await getWorker();const tr=await applyTemplate(w,boxes.src,boxes.anchors,tpl,null);if(tr){const ks=boxes.ks;tr.readings.forEach(r=>{r.crop=cropImg(boxes.src,r.box);r.box=r.box.map(v=>v/ks)});applyStatus(tr.readings,rec.running);
+        rec.readings=[...tr.readings,...rec.readings.filter(r=>!tr.readings.some(t=>normTag(t.tag)===normTag(r.tag))&&!(r.box&&tr.readings.some(t=>{const cx=(r.box[0]+r.box[2])/2,cy=(r.box[1]+r.box[3])/2;return cx>t.box[0]-5&&cx<t.box[2]+5&&cy>t.box[1]-5&&cy<t.box[3]+5})))];rec.tplUsed=tr.readings.length;rec.tplFail=false;draw()}}catch(e){console.warn(e)}})};
+  nl.addEventListener('click',e=>{const i=e.target.dataset.f;if(i===undefined)return;const x=rec.readings[+i];x.st='md';x.note='تحديد يدوي';draw()});
+  box.querySelector('.add').onclick=()=>{rec.readings.push({tag:'',desc:'',value:'',unit:'',color:'',st:'md',lim:'',note:'إدخال يدوي'});draw();list.lastElementChild.querySelector('input').focus()};
+  box.querySelector('.dl').onclick=()=>{open.delete(box);updBar();box.remove()};
+  const sv=box.querySelector('.sv');
+  sv._save=async()=>{rec.page=box.querySelector('.pg').value.trim()||'صفحة غير مسمّاة';{const pp=PAGES.find(p=>p.n.toLowerCase()===rec.page.toLowerCase());rec.pageKey=pp?pp.n:''}rec.unit=box.querySelector('.un').value;rec.date=box.querySelector('.dt').value||today;rec.notes=box.querySelector('.nt').value;
+    const keep=rec.readings.filter(r=>r.st&&(r.tag||r.desc||r.value)).map(({box,tpl,...r})=>r);const out={...rec,readings:keep,faults:toFaults(keep)};sv.disabled=true;sv.textContent='جارٍ الحفظ…';
+    try{await persist(out);open.delete(box);updBar();box.innerHTML=`<div class="status">✓ حُفظت صفحة <b>${esc(out.page)}</b> — ${esc(out.unit)} — ${keep.length?keep.length+' متحسس عاطل':'بدون أعطال'}</div>`;toast('حُفظ في السجل')}catch(err){sv.disabled=false;sv.textContent='حفظ في السجل';toast(err&&err.code==='quota_exceeded'?'السجل ممتلئ، احذف سجلات قديمة.':'تعذّر الحفظ، حاول مرة أخرى.')}};
+  sv.onclick=()=>sv._save();
+}
+$('#lq').oninput=renderLog;$('#lu').onchange=renderLog;
+function renderLog(){
+  const q=$('#lq').value.trim().toLowerCase(),u=$('#lu').value;
+  const rs=records.filter(r=>(!u||r.unit===u)&&(!q||JSON.stringify([r.page,r.readings,r.faults,r.notes]).toLowerCase().includes(q)));
+  const el=$('#logList');
+  if(!rs.length){el.innerHTML='<p class="muted">لا توجد سجلات بعد. صوّر أول شاشة من تبويب «التحليل».</p>';return}
+  el.innerHTML=rs.map(r=>{const c={hi:0,md:0,lo:0};r.faults.forEach(f=>c[f.severity]=(c[f.severity]||0)+1);return `<div class="log-item"><img alt="" src="${esc(r.thumb)}"><div><b>${esc(r.page)}</b> · ${esc(r.unit)}<div class="muted">${esc(r.date)} · ${esc(r.shift||'')} ${r.eng?'· '+esc(r.eng):''} </div><div>${r.faults.length?Object.entries(c).filter(x=>x[1]).map(([k,n])=>`<span class="chip ${k}">${SEV[k][0]} ${n}</span>`).join(' '):'<span class="chip okc">بدون أعطال</span>'}</div></div><button class="btn ghost sm" data-del="${esc(r.id)}">حذف</button></div>`}).join('');
+}
+$('#logList').addEventListener('click',async e=>{const id=e.target.dataset.del;if(!id)return;if(e.target.dataset.sure){try{await removeRec(id);toast('حُذف')}catch(err){toast('تعذّر الحذف')}}else{e.target.dataset.sure=1;e.target.textContent='تأكيد الحذف؟';e.target.classList.add('red')}});
+
+['#d1','#d2','#ru','#rt','#rthumb','#rnorm'].forEach(s=>$(s).addEventListener('change',renderReport));
+function selected(){const a=$('#d1').value||'0000',b=$('#d2').value||'9999',u=$('#ru').value;const L=records.filter(r=>r.date>=a&&r.date<=b&&(!u||r.unit===u));
+  /* the same page saved more than once on a day: keep the latest save only */
+  const best={};L.forEach(r=>{const k=r.unit+'|'+(r.pageKey||r.page)+'|'+r.date;if(!best[k]||(r.ts||0)>(best[k].ts||0))best[k]=r});
+  return Object.values(best).sort((x,y)=>(x.unit.localeCompare(y.unit,'en',{numeric:true}))||((x.ts||0)-(y.ts||0)))}
+function pageShell(n){return `<div class="a4"><div class="hd"><div><h2>${esc($('#rt').value)}</h2><div class="s">محطة شط البصرة الغازية — توربينات GE Frame 9E</div></div><div class="s" style="text-align:left">تاريخ الإصدار<br>${esc(today)}</div></div>${n===1?'<div class="meta"></div><div class="sum"></div>':''}<div class="body"></div><div class="pg"></div><div style="font-size:8.5px;color:#555;text-align:center;margin-top:2px">أُعدّ بواسطة تطبيق «سجل أعطال HMI» — تصميم وبرمجة م. محمد علي محمد صبيح · © 2026</div></div>`}
+function renderReport(){
+  const all0=selected(),box=$('#sheets');const showOk=$('#rnorm').checked;
+  const sens=r=>((r.readings&&r.readings.length)?r.readings.map(x=>({tag:x.tag,desc:badDesc(x.desc)?'':x.desc,value:x.value,unit:x.unit,lim:x.lim||'',st:x.st||'',note:x.note||''})):(r.faults||[]).map(f=>({tag:f.tag,desc:f.desc,value:f.value,unit:'',lim:f.limit||'',st:f.severity,note:f.note||''}))).filter(x=>x.st);
+  const rs=all0.filter(r=>sens(r).length),okPages=all0.filter(r=>!sens(r).length);
+  let nS=0,c={hi:0,md:0,lo:0};rs.forEach(r=>sens(r).forEach(x=>{nS++;if(x.st)c[x.st]++}));
+  box.innerHTML=pageShell(1);
+  const units=[...new Set(rs.map(r=>r.unit))].join('، ')||'—';const engs=[...new Set(rs.map(r=>r.eng).filter(Boolean))].join('، ')||'—';
+  box.querySelector('.meta').innerHTML=`<div>الفترة: <b><span dir="ltr">${esc($('#d1').value)}</span>${$('#d2').value!==$('#d1').value?' إلى <span dir="ltr">'+esc($('#d2').value)+'</span>':''}</b></div><div>الوحدات: <b>${esc(units)}</b></div><div>صفحات فيها أعطال: <b>${rs.length}</b></div><div>المهندس: <b>${esc(engs)}</b></div>`;
+  box.querySelector('.sum').innerHTML=`<span>المتحسسات العاطلة: <b>${nS}</b></span><span>عالٍ: <b>${c.hi}</b></span><span>متوسط: <b>${c.md}</b></span><span>منخفض: <b>${c.lo}</b></span><span>صفحات مفحوصة: <b>${all0.length}</b></span>`+(showOk&&okPages.length?`<div style="flex-basis:100%;font-size:11px">صفحات بدون أعطال: ${okPages.map(r=>esc(r.unit+' — '+r.page)).join('، ')}</div>`:'');
+  {const byU={};all0.forEach(r=>{(byU[r.unit]=byU[r.unit]||new Set()).add(r.pageKey||PAGES.find(p=>p.n===r.page)?.n||'')});
+   const rows=Object.keys(byU).sort((a,b)=>a.localeCompare(b,'en',{numeric:true})).map(u=>{const done=PAGES.filter(p=>byU[u].has(p.n));const miss=PAGES.filter(p=>!byU[u].has(p.n));return `<div><b>${esc(u)}</b>: ${done.length}/${PAGES.length} صفحة${miss.length?' — غير مفحوصة: '+miss.map(p=>esc(p.n.replace(/ \d{4}$/,''))).join('، '):' ✓ الجولة كاملة'}</div>`}).join('');
+   if(rows)box.querySelector('.sum').insertAdjacentHTML('afterend',`<div style="font-size:10.5px;border:1px solid #000;padding:4px 8px;margin-bottom:8px"><b>جولة الفحص:</b>${rows}</div>`)}
+  const thead='<thead><tr><th style="width:24px">#</th><th style="width:92px">Tag</th><th>الوصف</th><th style="width:70px">القراءة</th><th style="width:50px">الوحدة</th><th style="width:70px">الحد</th><th style="width:52px">الخطورة</th><th>ملاحظة</th></tr></thead>';
+  let page=box.lastElementChild,body=page.querySelector('.body'),tb=null;
+  const over=()=>body.scrollHeight>body.clientHeight;
+  const newPage=()=>{box.insertAdjacentHTML('beforeend',pageShell(2));page=box.lastElementChild;body=page.querySelector('.body')};
+  const section=(r,cont)=>{body.insertAdjacentHTML('beforeend',`<div style="font-size:12.5px;font-weight:700;margin:10px 0 4px;display:flex;justify-content:space-between;gap:8px"><span>${esc(r.unit)} — ${esc(r.page)}${cont?' (تابع)':''}</span><span style="font-weight:400">${esc(r.date)} · ${esc(r.shift||'')}</span></div><table>${thead}<tbody></tbody></table>`);tb=body.lastElementChild.querySelector('tbody')};
+  let shown=0;
+  rs.forEach(r=>{const list=sens(r);shown++;
+    section(r,false);
+    if(!list.length)tb.insertAdjacentHTML('beforeend','<tr><td colspan="8">لا توجد قراءات مسجلة</td></tr>');
+    list.forEach((x,i)=>{const tr=`<tr style="${x.st==='hi'?'background:#f9d3d0;font-weight:700':x.st?'background:#fbecc4':''}"><td>${i+1}</td><td dir="ltr">${esc(x.tag)}</td><td>${esc(x.desc)}</td><td dir="ltr" style="text-align:right">${esc(x.value)}</td><td dir="ltr">${esc(x.unit)}</td><td dir="ltr">${esc(x.lim)}</td><td>${SEV[x.st][0]}</td><td>${esc(x.note)}</td></tr>`;
+      tb.insertAdjacentHTML('beforeend',tr);
+      if(over()){tb.lastElementChild.remove();if(!tb.children.length)body.lastElementChild.remove(),body.lastElementChild.remove();newPage();section(r,i>0);tb.insertAdjacentHTML('beforeend',tr)}});
+    if(r.notes){body.insertAdjacentHTML('beforeend',`<div style="font-size:11px;margin-top:3px">ملاحظات: ${esc(r.notes)}</div>`);if(over()){body.lastElementChild.remove();newPage();body.insertAdjacentHTML('beforeend',`<div style="font-size:11px">ملاحظات ${esc(r.unit)} — ${esc(r.page)}: ${esc(r.notes)}</div>`)}}
+  });
+  if(!shown)body.insertAdjacentHTML('beforeend','<p style="font-size:13px">لا توجد متحسسات عاطلة ضمن الفترة والوحدة المختارة.</p>');
+  if($('#rsite').checked)for(const k of ['fault','maint']){const L=notesFor(k);if(!L.length)continue;
+    const nh='<thead><tr><th style="width:24px">#</th><th style="width:70px">الوحدة</th><th style="width:74px">التاريخ / الوجبة</th><th style="width:92px">الوقت</th><th style="width:100px">المعدة / المكان</th><th>'+(k==='fault'?'العطل':'العمل المنجز / الجاري')+'</th><th style="width:64px">الحالة</th></tr></thead>';
+    const head=cont=>{body.insertAdjacentHTML('beforeend',`<div style="font-size:12.5px;font-weight:700;margin:12px 0 4px">${NK[k][0]} في الموقع${cont?' (تابع)':''}</div><table>${nh}<tbody></tbody></table>`);tb=body.lastElementChild.querySelector('tbody')};
+    head(false);if(over()){body.lastElementChild.remove();body.lastElementChild.remove();newPage();head(false)}
+    L.forEach((n,i)=>{const tr=`<tr style="${k==='fault'&&!n.done?'background:#fbecc4':''}"><td>${i+1}</td><td>${esc(n.unit)}</td><td style="white-space:pre-line"><span dir="ltr">${esc(n.date)}</span>${n.shift?'\n'+esc(n.shift):''}</td><td style="font-size:10.5px;white-space:pre-line">${esc(nTimes(n).replace(' · ','\n'))}</td><td>${esc(n.eq||'')}</td><td style="white-space:pre-wrap">${esc(n.text)}</td><td>${NK[k][n.done?2:1]}</td></tr>`;
+      tb.insertAdjacentHTML('beforeend',tr);if(over()){tb.lastElementChild.remove();newPage();head(true);tb.insertAdjacentHTML('beforeend',tr)}})}
+  if($('#rthumb').checked&&rs.length){newPage();body.innerHTML='<h3 style="font-size:14px;margin:0 0 8px">صور الشاشات المرفقة</h3><div class="thumbs"></div>';let g=body.querySelector('.thumbs');
+    rs.forEach(r=>{const h=`<div><img alt="" src="${esc(r.thumb)}"><p>${esc(r.unit)} — ${esc(r.page)} — ${esc(r.date)}</p></div>`;g.insertAdjacentHTML('beforeend',h);if(over()){g.lastElementChild.remove();newPage();body.innerHTML='<div class="thumbs"></div>';g=body.querySelector('.thumbs');g.insertAdjacentHTML('beforeend',h)}})}
+  const last=box.lastElementChild;last.querySelector('.pg').insertAdjacentHTML('beforebegin','<div class="ft"><div class="sig">المهندس المناوب<div></div></div><div class="sig">مسؤول الوجبة<div></div></div><div class="sig">رئيس القسم<div></div></div></div>');
+  const all=box.querySelectorAll('.a4');all.forEach((p,i)=>p.querySelector('.pg').textContent=`صفحة ${i+1} من ${all.length}`);
+  fitSheets();
+}
+function fitSheets(){const b=$('#sheets');b.style.zoom='';const z=Math.min(1,(b.clientWidth-4)/794);if(z<1)b.style.zoom=z}
+new ResizeObserver(()=>{if($('#rep').classList.contains('on'))fitSheets()}).observe(document.body);
+
+async function save(name,data){const dl=await claude.use('downloads');if(!dl){toast('التنزيل غير متاح في هذا العرض');return}
+  try{await dl.save({filename:name,data});toast('تم التنزيل')}catch(e){toast(e&&e.code==='declined'?'أُلغي التنزيل':e&&e.code==='host_unavailable'?'افتح التطبيق من المتصفح لحفظ الملف':'تعذّر التنزيل')}}
+$('#pdfBtn').onclick=async e=>{const b=e.target;renderReport();b.disabled=true;b.textContent='جارٍ إنشاء PDF…';
+  try{const {jsPDF}=window.jspdf;const pdf=new jsPDF({unit:'mm',format:'a4',orientation:'portrait'});pdf.setProperties({title:$('#rt').value,author:'Eng. Mohammed Ali Mohammed Subaih — Shatt Al-Basra Gas Power Station',creator:'HMI Fault Log app by Eng. Mohammed Ali Mohammed Subaih',subject:'GT Frame 9E HMI sensor fault report'});$('#sheets').style.zoom='';const pages=[...$('#sheets').querySelectorAll('.a4')];
+    const host=document.createElement('div');host.style.cssText='position:fixed;left:0;top:0;width:794px;height:1123px;overflow:hidden;z-index:-1;direction:rtl;background:#fff';document.body.appendChild(host);
+    try{if(document.fonts){await Promise.all([400,500,600,700].flatMap(w=>['','bold '].slice(0,1).map(()=>document.fonts.load(w+' 12px "IBM Plex Sans Arabic"','تسريب زيت abc 123')))).catch(()=>{});await document.fonts.ready}
+      for(let i=0;i<pages.length;i++){host.innerHTML='';const c=pages[i].cloneNode(true);c.style.boxShadow='none';c.style.margin='0';host.appendChild(c);
+        const cv=await html2canvas(c,{scale:2,backgroundColor:'#fff',useCORS:true,scrollX:0,scrollY:0,windowWidth:794,windowHeight:1123,x:0,y:0,width:794,height:1123});
+        if(i)pdf.addPage();pdf.addImage(cv.toDataURL('image/jpeg',.92),'JPEG',0,0,210,297)}}finally{host.remove()}
+    fitSheets();await save(`HMI-Sensors-${$('#d1').value}_${$('#d2').value}.pdf`,pdf.output('blob'))}catch(err){fitSheets();toast('تعذّر إنشاء PDF، جرّب نسخة HTML')}
+  b.disabled=false;b.textContent='تنزيل PDF'};
+$('#htmlBtn').onclick=async()=>{renderReport();const css=[...document.styleSheets].map(s=>{try{return [...s.cssRules].map(r=>r.cssText).filter(t=>t.startsWith('.a4')).join('\n')}catch(e){return ''}}).join('\n');
+  const doc=`<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc($('#rt').value)}</title><style>@page{size:A4;margin:0}body{margin:0;background:#ccc}${css}.a4{margin:0 auto;box-shadow:none;page-break-after:always}@media screen{.a4{margin:12px auto}}</style></head><body>${$('#sheets').innerHTML}</body></html>`;
+  await save(`HMI-Sensors-${$('#d1').value}.html`,doc)};
+}
+</script>
+</body>
+</html>
