@@ -1,0 +1,32 @@
+name: Build Android APK
+on:
+  push: { branches: [main] }
+  workflow_dispatch: {}
+permissions: { contents: write }
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.9' }
+      - name: Bundle the web app inside the APK
+        run: |
+          mkdir -p android/app/src/main/assets/www
+          cp -r index.html manifest.json app lib pp ocr icons android/app/src/main/assets/www/
+      - name: Build
+        working-directory: android
+        run: gradle assembleRelease --no-daemon --stacktrace
+      - run: cp android/app/build/outputs/apk/release/app-release.apk HMI-Fault-Log.apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: تطبيق سجل أعطال HMI (Android)
+          make_latest: true
+          files: HMI-Fault-Log.apk
+          body: |
+            تطبيق «سجل أعطال HMI» لتوربينات GE Frame 9E — يعمل بدون إنترنت.
+            تصميم وبرمجة: م. محمد علي محمد صبيح — محطة شط البصرة الغازية © 2026
+            نزّل الملف HMI-Fault-Log.apk وثبّته على الهاتف.
